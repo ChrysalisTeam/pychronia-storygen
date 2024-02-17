@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "pychronia-storygen"
+version = "0.1.0"
+description = ""
+authors = ["Pascal Chambon <pythoniks@gmail.com>"]
+readme = "README.rst"
+packages = [{include = "pychronia_storygen", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
