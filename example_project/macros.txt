@@ -1,0 +1,7 @@
+
+
+{% macro faction_presentation(faction_name) %}
+
+Your faction is: {{ faction_name }}!
+
+{% endmacro %}

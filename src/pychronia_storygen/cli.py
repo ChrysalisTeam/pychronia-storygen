@@ -38,31 +38,39 @@ def cli():  #test, coverage, apk, deploy, po, mo):
 
     project_sheet_groups = project_data["sheets"]
 
-    jinja_context = project_data["variables"]
+    project_variables = project_data["variables"]
+
+    use_macro_tags = True  # FIXME
 
     # FIXME here add TEMPLATES_COMMON too
-    jinja_env = load_jinja_environment([project_dir], use_macro_tags=True)
+    jinja_env = load_jinja_environment(["."], use_macro_tags=use_macro_tags)
 
-    for sheet_group_name, sheet_group in project_sheet_groups.items():
+    for group_name, sheet_group in project_sheet_groups.items():
         for character_name, character_sheet_files in sheet_group.items():
 
-            logging.info("Processing sheet for character %s of group %s" % (character_name, sheet_group_name))
-
-            print(">>> ", character_name, character_sheet_files)
+            logging.info("Processing sheet for character %s of group %s" % (character_name, group_name))
+            ##print(">>> ", character_name, character_sheet_files)
 
             filepath_base = os.path.join(output_dir, character_name)  # TODO improve
 
             full_rest_content = ""
 
             for sheet_file in character_sheet_files:
-                logging.info("Rendering template file %r with jinja2", sheet_file)
+                logging.debug("Rendering template file %r with jinja2", sheet_file)
                 rst_content_tpl = load_rst_file(sheet_file)
+
+                jinja_context = dict(
+                    group_name=group_name,
+                    character_name=character_name,
+                    **project_variables
+                )
                 rst_content = render_with_jinja_and_fact_tags(
                     content=rst_content_tpl,
                     jinja_env=jinja_env,
                     jinja_context=jinja_context)
                 full_rest_content += "\n\n" + rst_content
 
+            logging.debug("Writing RST and PDF files with filename base %s", filepath_base)
             convert_rst_content_to_pdf(filepath_base=filepath_base,
                                        rst_content=full_rest_content,
                                        conf_file="rst2pdf.conf",

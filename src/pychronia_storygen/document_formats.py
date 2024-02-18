@@ -1,5 +1,7 @@
 import copy
 import functools
+import logging
+
 import jinja2
 import os
 import re
@@ -86,17 +88,14 @@ def load_jinja_environment(templates_root: list, use_macro_tags: bool):
     jinja_env.filters['dangerous_render'] = dangerous_render
 
     if use_macro_tags:
-        # requires https://github.com/frascoweb/jinja-macro-tags
+        # Requires https://github.com/frascoweb/jinja-macro-tags or a fork
         from jinja_macro_tags import configure_environment
         configure_environment(jinja_env)
 
-        # we do similarly to jinja_env.macros.register_from_environment(), but for RST files!
-        try:
-            templates = jinja_env.macros.environment.list_templates(extensions=("rst",))
-        except TypeError:
-            pass
+        # We do similarly to jinja_env.macros.register_from_environment(), but for RST files!
+        templates = jinja_env.macros.environment.list_templates(extensions=("rst", "txt"))
         for tpl in templates:
-            #print("jinja_env.macros.register_from_template -->", tpl)
+            logging.debug("registering jinja2 macros from template %s", tpl)
             jinja_env.macros.register_from_template(tpl)
 
     return jinja_env
@@ -143,7 +142,7 @@ def convert_rst_file_to_pdf(rst_file, pdf_file, conf_file="", extra_args=""):
     command = r'''python -m rst2pdf.createpdf "%(rst_file)s" -o "%(pdf_file)s" --config=%(conf_file)s --fit-background-mode=scale --first-page-on-right --smart-quotes=2 --break-side=any  -e dotted_toc --fit-literal-mode=shrink %(extra_args)s''' % vars
 
     #print("Current directory: %s" % os.getcwd())
-    print("Executing command: %s" % command)
+    print("Executing command: %s" % command)  # FIXME
 
     res = os.system(command)
 
