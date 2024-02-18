@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-from __future__ import print_function, unicode_literals
 
 import copy
 import functools
@@ -15,107 +13,7 @@ from jinja2.runtime import Context
 from markupsafe import Markup
 
 
-##################################
-#  LOAD AND WRIT YAML/RST FILES  #
-##################################
-
-
-def load_yaml_file(yaml_file):
-    with open(yaml_file, "r", encoding="utf8") as f:
-        data = yaml.load(f, Loader=yaml.FullLoader)
-        return data
-
-
-def load_rst_file(rst_file):
-    with open(rst_file, "r", encoding="utf8") as f:
-        data = f.read()
-        return data
-
-
-def write_rst_file(rst_file, data):
-    """
-    Also converts [BR] to pdf spacings, on the fly.
-    """
-
-    if isinstance(data, (tuple, list)):
-        full_rst = "\n\n".join(data)
-    else:
-        assert isinstance(data, str), type(data)
-        full_rst = data
-
-    full_rst = full_rst.replace("[BR]",  # for stuffs coming from yaml fixtures
-                                textwrap.dedent("""
-
-                                        .. raw:: pdf
-
-                                           Spacer 0 15
-
-                                           """))
-
-    # basic fixing of orphan punctuation marks for FR language...
-    full_rst = (full_rst.replace(" !", u"\u00A0!")
-                .replace(" ?", u"\u00A0?")
-                .replace(" :\n", u"\u00A0:\n"))  # beware about RST directives here...
-
-    # autocreate missing folders
-    folder = os.path.dirname(rst_file)
-    assert folder  # else, naked file basename, it's not good
-    if not os.path.exists(folder):
-        os.makedirs(folder)
-
-    with open(rst_file, "w", encoding="utf8") as f:
-        f.write(full_rst)
-
-
-####################################
-#     PROCESS DATA WITH JINJA2     #
-####################################
-
-
-def load_jinja_environment(templates_root: list, use_macro_tags: bool):
-    # IMPORTANT - we refuse undefined template vars: exceptions get raised instead
-    jinja_env = jinja2.Environment(undefined=jinja2.StrictUndefined,
-                                   loader=jinja2.FileSystemLoader(templates_root),
-                                   trim_blocks=False,
-                                   lstrip_blocks=False,
-                                   extensions=[StoryChecksExtension])
-
-    @contextfilter
-    def dangerous_render(context, value):
-        return render_with_jinja_and_fact_tags(content=value, jinja_env=jinja_env, jinja_context=context)
-
-    jinja_env.filters['dangerous_render'] = dangerous_render
-
-    if use_macro_tags:
-        # requires https://github.com/frascoweb/jinja-macro-tags
-        from jinja_macro_tags import configure_environment
-        configure_environment(jinja_env)
-
-        # we do similarly to jinja_env.macros.register_from_environment(), but for RST files!
-        try:
-            templates = jinja_env.macros.environment.list_templates(extensions=("rst",))
-        except TypeError:
-            pass
-        for tpl in templates:
-            #print("jinja_env.macros.register_from_template -->", tpl)
-            jinja_env.macros.register_from_template(tpl)
-
-    return jinja_env
-
-
-def render_with_jinja_and_fact_tags(content, jinja_env, jinja_context):
-    """
-    Renders content and analyses/removes the {% fact %} markers from output.
-    """
-    assert isinstance(jinja_context, (dict, Context)), type(jinja_context)
-    assert isinstance(content, (str, bytes)), repr(content)
-    #print("<<<RENDERING CONTENT>>>\n %s" % content[:1000].encode("ascii", "ignore"))
-    template = jinja_env.from_string(content)
-    output_tagged = template.render(jinja_context)
-    output = jinja_env.extract_facts_from_intermediate_markup(output_tagged)  # must exist
-    return output
-
-
+# Markers inserted into RST chunks, to be recognized later when generating full sheets
 MARKER_FORMAT = r'{#>%(fact_name)s|%(as_what)s|%(player_id)s|%(is_cheat_sheet)s<#}'
 MARKER_REGEX = r'\{#>(?P<fact_name>.*?)\|(?P<as_what>.*?)\|(?P<player_id>.*?)\|(?P<is_cheat_sheet>.*?)<#\}'
 
@@ -159,7 +57,7 @@ class StoryChecksExtension(Extension):
     def parse(self, parser):
 
         template_name = parser.name
-        #character_name = template_name.split("_")[0]
+        # character_name = template_name.split("_")[0]
 
         # the first token is the token that started the tag.
         # We get the line number so that we can give
@@ -181,7 +79,7 @@ class StoryChecksExtension(Extension):
                 as_what_value = parser.stream.expect(lexer.TOKEN_NAME).value  # eg "author"
             as_what = nodes.Const(as_what_value)
 
-            #if "mytest" in fact_name.value:
+            # if "mytest" in fact_name.value:
             #    print(">> ENCOUNTERED FACT", fact_name.value, as_what.value, lineno, "in", parser.name)
             """
             # if there is a comma, the user provided a timeout.  If not use
@@ -190,21 +88,21 @@ class StoryChecksExtension(Extension):
                 args.append(parser.parse_expression())
             else:
                 args.append(nodes.Const(None))
-    
+
             # now we parse the body of the cache block up to `endcache` and
             # drop the needle (which would always be `endcache` in that case)
             body = parser.parse_statements(['name:endcache'], drop_needle=True)
-    
+
             # now return a `CallBlock` node that calls our _cache_support
             # helper method on this extension.
             return nodes.CallBlock(self.call_method('_cache_support', args),
                                    [], [], body).set_lineno(lineno)
             """
 
-            #if parser.name:
+            # if parser.name:
             # IMPORTANT: we're not rendering from a string but from a template file,
             # so we assume we're in a macro import, so we DO NOT execute the Fact Tag!
-            #return nodes.Output([])  # no output
+            # return nodes.Output([])  # no output
 
             call = self.call_method('_fact_processing', [fact_name, as_what, context], [], lineno=lineno)
 
@@ -213,8 +111,8 @@ class StoryChecksExtension(Extension):
             symbol_value = parser.parse_primary()
 
             for_token = parser.stream.expect('name:for').value
-            #token = parser.stream.current
-            #if not token.test('name:for'):
+            # token = parser.stream.current
+            # if not token.test('name:for'):
             #    raise
 
             symbol_name = parser.parse_primary()
@@ -241,7 +139,7 @@ class StoryChecksExtension(Extension):
         player_id = context.get("current_player_id", self.DUMMY_GAMEMASTER_NAME)
         is_cheat_sheet = context.get("is_cheat_sheet", False)
 
-        #if "mytest" in fact_name:
+        # if "mytest" in fact_name:
         #    print(">> >> PROCESSING FACT", fact_name, as_what, player_id)
         #    import traceback
         #    traceback.print_stack()
@@ -372,7 +270,7 @@ def _display_and_check_story_facts(jinja_env, masked_user_names):
         for player_id, fact_node in fact_data.items():
             has_coherence_errors = _check_fact_leaf(fact_name, player_id=player_id, fact_node=fact_node) or has_coherence_errors
 
-    facts_summary = [(fact_name,  #.replace("_", " "),
+    facts_summary = [(fact_name,  # .replace("_", " "),
                       sorted((x, y) for (x, y) in fact_data.items()
                              if y["is_author"] and x not in masked_user_names),
                       sorted((x, y) for (x, y) in fact_data.items()
@@ -391,49 +289,3 @@ def display_and_check_story_tags(jinja_env, masked_user_names):
     has_any_coherence_error = has_coherence_errors1 or has_coherence_errors2 or has_coherence_errors3
 
     return has_any_coherence_error, facts_summary
-
-
-
-
-####################################
-#      CONVERT MARKUP TO PDF       #
-####################################
-
-def convert_rst_file_to_pdf(rst_file, pdf_file, conf_file="", extra_args=""):
-    """
-    Use rst2pdf executable to convert rst file to pdf.
-
-    IMPORTANT : you can output default styles with "rst2pdf --print-stylesheet"
-    """
-
-    conf_file = conf_file or ""
-    assert not conf_file or os.path.exists(conf_file), conf_file  # must be in CWD
-
-    extra_args = extra_args or ""
-
-    vars = dict(rst_file=rst_file,
-                pdf_file=pdf_file,
-                conf_file=conf_file,
-                extra_args=extra_args)
-
-    # fit-background-mode=scale doesn't work in config file, at the moment...
-    # other options: --very-verbose --show-frame-boundary or just "-v"
-    command = r'''python -m rst2pdf.createpdf "%(rst_file)s" -o "%(pdf_file)s" --config=%(conf_file)s --fit-background-mode=scale --first-page-on-right --smart-quotes=2 --break-side=any  -e dotted_toc --fit-literal-mode=shrink %(extra_args)s''' % vars
-
-    #print("Current directory: %s" % os.getcwd())
-    print("Executing command: %s" % command)
-
-    res = os.system(command)
-
-    assert res == 0, "Error when calling rst2pdf"
-
-
-def convert_rst_content_to_pdf(filepath_base, rst_content, conf_file="", extra_args=""):
-    """
-    We use an intermediate RST file, both for simplicity and debugging.
-    """
-    rst_file = filepath_base + ".rst"
-    pdf_file = filepath_base + ".pdf"
-
-    write_rst_file(rst_file, data=rst_content)
-    convert_rst_file_to_pdf(rst_file, pdf_file, conf_file=conf_file, extra_args=extra_args)
