@@ -136,7 +136,7 @@ class StoryChecksExtension(Extension):
 
     def _fact_processing(self, fact_name, as_what, context):
 
-        player_id = context.get("current_player_id", self.DUMMY_GAMEMASTER_NAME)
+        player_id = context.get("current_player_id", self.DUMMY_GAMEMASTER_NAME)  # FIXME CHANGE THIS NAME
         is_cheat_sheet = context.get("is_cheat_sheet", False)
 
         # if "mytest" in fact_name:
@@ -181,14 +181,14 @@ def extract_facts_from_intermediate_markup(source, facts_registry):
         is_author = (as_what == "author")
 
         fact_params = facts_registry.setdefault(fact_name, {})
-        player_params = fact_params.setdefault(player_id, {})
+        fact_player_params = fact_params.setdefault(player_id, {})
 
-        if player_params:
-            assert player_params['is_author'] == is_author, (fact_name, player_id)
-        player_params['is_author'] = player_params.get('is_author') or is_author
+        if fact_player_params:
+            assert fact_player_params['is_author'] == is_author, (fact_name, player_id)
+        fact_player_params['is_author'] = fact_player_params.get('is_author') or is_author
 
-        player_params['in_cheat_sheet'] = player_params.get('in_cheat_sheet') or is_cheat_sheet
-        player_params['in_normal_sheet'] = player_params.get('in_normal_sheet') or not is_cheat_sheet
+        fact_player_params['in_cheat_sheet'] = fact_player_params.get('in_cheat_sheet') or is_cheat_sheet
+        fact_player_params['in_normal_sheet'] = fact_player_params.get('in_normal_sheet') or not is_cheat_sheet
 
         return ""  # REMOVE OUTPUT
 
