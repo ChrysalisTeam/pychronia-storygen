@@ -21,7 +21,7 @@ from pychronia_storygen.story_tags import StoryChecksExtension
 
 def load_yaml_file(yaml_file):
     with open(yaml_file, "r", encoding="utf8") as f:
-        data = yaml.load(f, Loader=yaml.FullLoader)
+        data = yaml.load(f, Loader=yaml.SafeLoader)
         return data
 
 

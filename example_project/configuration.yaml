@@ -1,0 +1,15 @@
+
+"sheets":
+  "characters":
+    "hero":
+      - "characters/_common_character_conclusion.txt"
+      - "characters/hero_sheet.txt"
+      - "characters/_common_character_conclusion.txt"
+    "enemy":
+      - "characters/_common_character_conclusion.txt"
+      - "characters/hero_sheet.txt"
+      - "characters/_common_character_conclusion.txt"
+
+"variables":
+  "intro_message": "This is an introduction message"
+  "game_story_date": "March 13th, 1905"

@@ -78,7 +78,7 @@ def _extract_ingame_clues_text_from_odt(clues_file):
     """
     Extract texts and comments from LibreOffice ODT file.
     """
-    import odt2txt
+    from . import odt2txt
     odt = odt2txt.OpenDocumentTextFile(clues_file)
     text = odt.toString()
     return text
