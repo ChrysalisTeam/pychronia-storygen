@@ -1,0 +1,4 @@
+
+This is the common introduction for all characters.
+
+Intro message: {{ intro_message }}

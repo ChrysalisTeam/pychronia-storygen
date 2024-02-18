@@ -7,7 +7,7 @@ import re
 import sys
 import textwrap
 import yaml
-from jinja2 import nodes, lexer, contextfilter, Template
+from jinja2 import nodes, lexer, pass_context, Template
 from jinja2.ext import Extension
 from jinja2.runtime import Context
 from markupsafe import Markup
@@ -214,6 +214,7 @@ def _display_and_check_story_hints(jinja_env):
             # It's not a blocking coherence error, do don't set has_coherence_errors here
 
     return has_coherence_errors
+
 
 def _display_and_check_story_symbols(jinja_env):
     from pprint import pprint

@@ -1,5 +1,8 @@
 import sys, os
 
+src_dir = os.path.join(os.path.dirname(__file__), "src")
+sys.path.append(src_dir)
+
 if __name__ == "__main__":
-    from wacomponents.launcher import launch_main_module_with_crash_handler
-    launch_main_module_with_crash_handler("waauthenticator.waauthenticator_gui", client_type="APPLICATION")
+    from pychronia_storygen.cli import cli
+    cli()

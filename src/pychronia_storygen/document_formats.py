@@ -6,7 +6,7 @@ import re
 import sys
 import textwrap
 import yaml
-from jinja2 import nodes, lexer, contextfilter, Template
+from jinja2 import nodes, lexer, Template, pass_context
 from jinja2.ext import Extension
 from jinja2.runtime import Context
 from markupsafe import Markup
@@ -79,7 +79,7 @@ def load_jinja_environment(templates_root: list, use_macro_tags: bool):
                                    lstrip_blocks=False,
                                    extensions=[StoryChecksExtension])
 
-    @contextfilter
+    @pass_context
     def dangerous_render(context, value):
         return render_with_jinja_and_fact_tags(content=value, jinja_env=jinja_env, jinja_context=context)
 
@@ -154,7 +154,7 @@ def convert_rst_content_to_pdf(filepath_base, rst_content, conf_file="", extra_a
     """
     We use an intermediate RST file, both for simplicity and debugging.
     """
-    rst_file = filepath_base + ".rst"
+    rst_file = filepath_base + ".txt"  # Better than .rst for non-techs
     pdf_file = filepath_base + ".pdf"
 
     write_rst_file(rst_file, data=rst_content)
