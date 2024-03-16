@@ -1,15 +1,33 @@
 
-"sheets":
-  "characters":
-    "hero":
-      - "characters/_common_character_introduction.txt"
-      - "characters/hero_sheet.txt"
-      - "characters/_common_character_conclusion.txt"
-    "enemy":
-      - "characters/_common_character_introduction.txt"
-      - "characters/hero_sheet.txt"
-      - "characters/_common_character_conclusion.txt"
+"sheet_generation":
 
-"variables":
-  "intro_message": "This is an introduction message"
-  "game_story_date": "March 13th, 1905"
+  "variables":
+    "intro_message": "This is a default introduction message for all sheets !"
+    "game_story_date": "March 13th, 1905"
+
+  "sheets":
+    "world_history": "lore/world_history.txt"
+
+  "groups":
+
+    "playable_characters":
+      "variables":
+        "intro_message": "This is an introduction message visible to all PLAYABLE character sheets !"
+      "sheets":
+        "hero":
+          - "characters/_common_character_introduction.txt"
+          - "characters/hero_sheet.txt"
+          - "characters/_common_character_conclusion.txt"
+        "enemy":
+          - "characters/_common_character_introduction.txt"
+          - "characters/hero_sheet.txt"
+          - "characters/_common_character_conclusion.txt"
+
+    "non_playable_characters":
+      "variables":
+        "intro_message": "This is an introduction message visible to all NON-PLAYABLE character sheets !"
+      "sheets":
+        "goblin":
+          - "characters/_common_character_introduction.txt"
+          - "characters/goblin_sheet.txt"
+          - "characters/_common_character_conclusion.txt"
