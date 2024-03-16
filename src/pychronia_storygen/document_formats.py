@@ -1,6 +1,7 @@
 import copy
 import functools
 import logging
+from pathlib import Path
 
 import jinja2
 import os
@@ -149,12 +150,12 @@ def convert_rst_file_to_pdf(rst_file, pdf_file, conf_file="", extra_args=""):
     assert res == 0, "Error when calling rst2pdf"
 
 
-def convert_rst_content_to_pdf(filepath_base, rst_content, conf_file="", extra_args=""):
+def convert_rst_content_to_pdf(filepath_base: Path, rst_content, conf_file="", extra_args=""):
     """
     We use an intermediate RST file, both for simplicity and debugging.
     """
-    rst_file = filepath_base + ".txt"  # Better than .rst for non-techs
-    pdf_file = filepath_base + ".pdf"
+    rst_file = filepath_base.with_suffix(".txt")  # Better than .rst for non-techs
+    pdf_file = filepath_base.with_suffix(".pdf")
 
     write_rst_file(rst_file, data=rst_content)
     convert_rst_file_to_pdf(rst_file, pdf_file, conf_file=conf_file, extra_args=extra_args)

@@ -20,7 +20,7 @@
           - "characters/_common_character_conclusion.txt"
         "enemy":
           - "characters/_common_character_introduction.txt"
-          - "characters/hero_sheet.txt"
+          - "characters/enemy_sheet.txt"
           - "characters/_common_character_conclusion.txt"
 
     "non_playable_characters":

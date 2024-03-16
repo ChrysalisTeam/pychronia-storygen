@@ -1,2 +1,5 @@
 
+Conclusion
+##################
+
 This is the common conclusion for all characters.
