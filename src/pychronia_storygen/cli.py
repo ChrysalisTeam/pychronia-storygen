@@ -14,7 +14,7 @@ from pychronia_storygen.document_formats import load_yaml_file, load_jinja_envir
 
 
 def _recursively_generate_group_sheets(data_tree: dict, group_breadcrumb: tuple, variables: dict,
-                                       output_root_dir: Path, jinja_env, extra_rst2pdf_args):
+                                       output_root_dir: Path, jinja_env, rst2pdf_extra_args):
 
     group_variables = data_tree["variables"]
     group_sheets = data_tree["sheets"]
@@ -27,7 +27,7 @@ def _recursively_generate_group_sheets(data_tree: dict, group_breadcrumb: tuple,
 
     for character_name, character_sheet_files in group_sheets.items():
 
-        logging.info("Processing sheet for group %s and character %s"  % (group_name, character_name))
+        logging.info("Processing sheet for group '%s' and character '%s'"  % (group_name or "<empty>", character_name))
         ##print(">>> ", character_name, character_sheet_files)
 
         filepath_base = output_dir.joinpath(character_name)  # TODO improve
@@ -57,48 +57,41 @@ def _recursively_generate_group_sheets(data_tree: dict, group_breadcrumb: tuple,
         convert_rst_content_to_pdf(filepath_base=filepath_base,
                                    rst_content=full_rest_content,
                                    conf_file="rst2pdf.conf",
-                                   extra_args=extra_rst2pdf_args)
+                                   extra_args=rst2pdf_extra_args)
 
     sub_data_tree = data_tree.get("groups", None)
 
     if sub_data_tree:
         for group_name, group_data_tree in sub_data_tree.items():
             _recursively_generate_group_sheets(group_data_tree, group_breadcrumb=group_breadcrumb + (group_name,), variables=cumulated_variables,
-                                                   output_root_dir=output_root_dir, jinja_env=jinja_env, extra_rst2pdf_args=extra_rst2pdf_args)
+                                                   output_root_dir=output_root_dir, jinja_env=jinja_env, rst2pdf_extra_args=rst2pdf_extra_args)
 
 
 
 @click.command()
-# @click.option("--test", is_flag=True, help="test if the environement is nicely set up")
-# @click.option("--coverage", is_flag=True, help="Generate coverage")
-# @click.option("--apk", is_flag=True, help="Build an android apk with buildozer")
-# @click.option("--deploy", is_flag=True, help="Deploy the app to your android device")
-# @click.option("--po", is_flag=True, help="Create i18n message files")
-# @click.option("--mo", is_flag=True, help="Create i18n message locales")
-def cli():  #test, coverage, apk, deploy, po, mo):
+@click.argument('project_dir', type=click.Path(exists=True, file_okay=False))
+@click.option('--verbose', '-v', is_flag=True, help="Print more output.")
+def cli(project_dir, verbose):
     print("HELLO STARTING")
+    logging.basicConfig(level=(logging.DEBUG if verbose else logging.INFO))
 
-    logging.basicConfig(level=logging.DEBUG)  # FIXME
-
-    extra_rst2pdf_args = ""  # FIXME
-
-    project_dir = "example_project/"  # FIXME
+    logging.debug("Switching to current working directory: %s", project_dir)
     os.chdir(project_dir)
+
+    rst2pdf_extra_args = ""  # FIXME
 
     output_root_dir = Path("./_output") # FIXME
     os.makedirs(output_root_dir, exist_ok=True)
 
     yaml_conf_file = "./configuration.yaml"
 
-    use_macro_tags = True  # FIXME
-
     # FIXME here add TEMPLATES_COMMON too
-    jinja_env = load_jinja_environment(["."], use_macro_tags=use_macro_tags)
+    jinja_env = load_jinja_environment(["."], use_macro_tags=True)
 
     project_data_tree = load_yaml_file(yaml_conf_file)
 
     _recursively_generate_group_sheets(project_data_tree["sheet_generation"], group_breadcrumb=(), variables={},
-                                           output_root_dir=output_root_dir, jinja_env=jinja_env, extra_rst2pdf_args=extra_rst2pdf_args)
+                                           output_root_dir=output_root_dir, jinja_env=jinja_env, rst2pdf_extra_args=rst2pdf_extra_args)
 
 
 if __name__ == "__main__":
