@@ -1,9 +1,16 @@
 
-Introduction
-##################
+Sheet for character "{{ character_name }}"
+###############################################
 
+
+Introduction
+================
 This is the common introduction for all characters.
 
 Intro message: {{ intro_message }}
 
 <{ faction_presentation faction_name=group_name }/>
+
+
+Your sheet
+=============
