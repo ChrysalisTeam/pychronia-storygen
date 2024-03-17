@@ -1,3 +1,5 @@
 
 
 This is the character sheet for a random Goblin that players will meet!
+
+{% fact "Goblin secretly loves peanuts" %}

@@ -1,4 +1,7 @@
 
+settings:
+  "game_facts_template": "gamemasters/game_facts.txt"
+
 "sheet_generation":
 
   "variables":

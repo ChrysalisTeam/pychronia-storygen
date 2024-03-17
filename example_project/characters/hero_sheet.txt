@@ -1,3 +1,5 @@
 
 
 This is the character sheet for the Hero!
+
+{% fact "Hero has defeated the enemy" as author %}

@@ -1,0 +1,18 @@
+Facts and implicated characters
+==============================================
+
+*Characters who are author of a fact are marked in bold; if this fact is in their cheat sheet too, their name is followed by an asterisk.*
+
+{% macro display_names(listing) %}{% for name, data in listing.items()|sort %}{% if not loop.first %}, {% endif %}{% if data["is_author"] %}**{% endif %}{{name}}{% if data["is_author"] %}**{% endif %}{% if data["in_cheat_sheet"] %}\*{% endif %}{% endfor %}{% endmacro %}
+
+.. list-table::
+   :widths: 50 50
+   :header-rows: 1
+
+   * - Action or fact
+     - Knower(s)
+
+{% for fact, knowers in facts_registry.items() %}
+   * - {{fact}}
+     - {{display_names(knowers)}}
+{% endfor %}

@@ -17,6 +17,10 @@ from markupsafe import Markup
 MARKER_FORMAT = r'{#>%(fact_name)s|%(as_what)s|%(player_id)s|%(is_cheat_sheet)s<#}'
 MARKER_REGEX = r'\{#>(?P<fact_name>.*?)\|(?P<as_what>.*?)\|(?P<player_id>.*?)\|(?P<is_cheat_sheet>.*?)<#\}'
 
+IS_CHEAT_SHEET_VARNAME = "is_cheat_sheet"
+CURRENT_PLAYER_VARNAME = "current_player_id"
+DUMMY_GAMEMASTER_NAME = "<master>"
+
 
 class StoryChecksExtension(Extension):
     """
@@ -36,8 +40,6 @@ class StoryChecksExtension(Extension):
     """
     # a set of names that trigger the extension.
     tags = set(['fact', 'symbol', 'hint'])
-
-    DUMMY_GAMEMASTER_NAME = "<master>"
 
     def __init__(self, environment):
         super(StoryChecksExtension, self).__init__(environment)
@@ -136,8 +138,8 @@ class StoryChecksExtension(Extension):
 
     def _fact_processing(self, fact_name, as_what, context):
 
-        player_id = context.get("current_player_id", self.DUMMY_GAMEMASTER_NAME)  # FIXME CHANGE THIS NAME
-        is_cheat_sheet = context.get("is_cheat_sheet", False)
+        player_id = context.get(CURRENT_PLAYER_VARNAME, DUMMY_GAMEMASTER_NAME)  # FIXME CHANGE THIS NAME
+        is_cheat_sheet = context.get(IS_CHEAT_SHEET_VARNAME, False)
 
         # if "mytest" in fact_name:
         #    print(">> >> PROCESSING FACT", fact_name, as_what, player_id)
@@ -170,7 +172,7 @@ def extract_facts_from_intermediate_markup(source, facts_registry):
     """
 
     def process_fact(matchobj):
-
+        print(">> WE PROCESS FACT", matchobj.groups())
         fact_name = matchobj.group("fact_name")
         as_what = matchobj.group("as_what")
         player_id = matchobj.group("player_id")
@@ -184,7 +186,8 @@ def extract_facts_from_intermediate_markup(source, facts_registry):
         fact_player_params = fact_params.setdefault(player_id, {})
 
         if fact_player_params:
-            assert fact_player_params['is_author'] == is_author, (fact_name, player_id)
+            # User can't switch between author and viewer for a same fact...
+            assert fact_player_params['is_author'] == is_author, (fact_player_params['is_author'], is_author, fact_name, player_id)
         fact_player_params['is_author'] = fact_player_params.get('is_author') or is_author
 
         fact_player_params['in_cheat_sheet'] = fact_player_params.get('in_cheat_sheet') or is_cheat_sheet

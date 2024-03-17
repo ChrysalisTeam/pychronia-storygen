@@ -34,9 +34,34 @@ def load_rst_file(rst_file):
         return data
 
 
+def _convert_special_markups_and_punctuations(text):
+    text = text.replace("[BR]",
+                                textwrap.dedent("""
+
+                                        .. raw:: pdf
+
+                                           Spacer 0 15
+
+                                           """))
+    text = text.replace("[PAGEBREAK]",
+                                textwrap.dedent("""
+
+                                        .. raw:: pdf
+
+                                           PageBreak   
+
+                                        """))
+
+    # Basic fixing of orphan punctuation marks for FR language...
+    text = (text.replace(" !", u"\u00A0!")
+                .replace(" ?", u"\u00A0?")
+                .replace(" :\n", u"\u00A0:\n"))  # beware about RST directives here...
+    return text
+
+
 def write_rst_file(rst_file, data):
     """
-    Also converts [BR] to pdf spacings, on the fly.
+    Also converts [BR] and [PAGEBREAK] to pdf spacings, and fixes punctuation spaces, on the fly.
     """
 
     if isinstance(data, (tuple, list)):
@@ -45,21 +70,9 @@ def write_rst_file(rst_file, data):
         assert isinstance(data, str), type(data)
         full_rst = data
 
-    full_rst = full_rst.replace("[BR]",  # for stuffs coming from yaml fixtures
-                                textwrap.dedent("""
+    full_rst = _convert_special_markups_and_punctuations(full_rst)
 
-                                        .. raw:: pdf
-
-                                           Spacer 0 15
-
-                                           """))
-
-    # basic fixing of orphan punctuation marks for FR language...
-    full_rst = (full_rst.replace(" !", u"\u00A0!")
-                .replace(" ?", u"\u00A0?")
-                .replace(" :\n", u"\u00A0:\n"))  # beware about RST directives here...
-
-    # autocreate missing folders
+    # Autocreate missing folders
     folder = os.path.dirname(rst_file)
     assert folder  # else, naked file basename, it's not good
     if not os.path.exists(folder):
@@ -102,15 +115,25 @@ def load_jinja_environment(templates_root: list, use_macro_tags: bool):
     return jinja_env
 
 
-def render_with_jinja_and_fact_tags(content, jinja_env, jinja_context):
+def render_with_jinja(content=None, filename=None, *, jinja_env, jinja_context):
+    """Simple rendering, without extra steps"""
+    assert isinstance(jinja_context, (dict, Context)), type(jinja_context)
+    assert bool(content) ^ bool(filename), (content, filename)
+    assert content is None or isinstance(content, (str, bytes)), repr(content)
+    #print("<<<RENDERING CONTENT>>>\n %s" % content[:1000].encode("ascii", "ignore"))
+    if filename:
+        template = jinja_env.get_template(filename)
+    else:
+        template = jinja_env.from_string(content)
+    output = template.render(jinja_context)
+    return output
+
+
+def render_with_jinja_and_fact_tags(content=None, filename=None, *, jinja_env, jinja_context):  # FIXME rename this
     """
     Renders content and analyses/removes the {% fact %} markers from output.
     """
-    assert isinstance(jinja_context, (dict, Context)), type(jinja_context)
-    assert isinstance(content, (str, bytes)), repr(content)
-    #print("<<<RENDERING CONTENT>>>\n %s" % content[:1000].encode("ascii", "ignore"))
-    template = jinja_env.from_string(content)
-    output_tagged = template.render(jinja_context)
+    output_tagged = render_with_jinja(content, jinja_env=jinja_env, jinja_context=jinja_context)
     output = jinja_env.extract_facts_from_intermediate_markup(output_tagged)  # must exist
     return output
 

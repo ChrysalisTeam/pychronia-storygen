@@ -9,8 +9,8 @@ import subprocess
 import glob
 
 from pychronia_storygen.document_formats import load_yaml_file, load_jinja_environment, load_rst_file, \
-    render_with_jinja_and_fact_tags, convert_rst_content_to_pdf
-
+    render_with_jinja_and_fact_tags, convert_rst_content_to_pdf, render_with_jinja
+from pychronia_storygen.story_tags import CURRENT_PLAYER_VARNAME
 
 
 def _recursively_generate_group_sheets(data_tree: dict, group_breadcrumb: tuple, variables: dict,
@@ -27,12 +27,16 @@ def _recursively_generate_group_sheets(data_tree: dict, group_breadcrumb: tuple,
 
     for character_name, character_sheet_files in group_sheets.items():
 
+        player_variables = variables.copy()  # IMPORTANT
+        player_variables.update(group_variables)
+        player_variables[CURRENT_PLAYER_VARNAME] = character_name
+
         logging.info("Processing sheet for group '%s' and character '%s'"  % (group_name or "<empty>", character_name))
         ##print(">>> ", character_name, character_sheet_files)
 
         filepath_base = output_dir.joinpath(character_name)  # TODO improve
 
-        full_rest_content = ""
+        full_rst_content = ""
 
         # Be tolerant if a single string was entered
         character_sheet_files = (character_sheet_files,) if isinstance(character_sheet_files, str) else character_sheet_files
@@ -45,18 +49,18 @@ def _recursively_generate_group_sheets(data_tree: dict, group_breadcrumb: tuple,
                 group_breadcrumb=group_breadcrumb,
                 group_name=group_name,
                 character_name=character_name,
-                **cumulated_variables
+                **player_variables
             )
             rst_content = render_with_jinja_and_fact_tags(
                 content=rst_content_tpl,
                 jinja_env=jinja_env,
                 jinja_context=jinja_context)
-            full_rest_content += "\n\n" + rst_content
+            full_rst_content += "\n\n" + rst_content
 
         logging.debug("Writing RST and PDF files with filename base %s", filepath_base)
         convert_rst_content_to_pdf(filepath_base=filepath_base,
-                                   rst_content=full_rest_content,
-                                   conf_file="rst2pdf.conf",
+                                   rst_content=full_rst_content,
+                                   conf_file="rst2pdf.conf",  # FIXME put a registry
                                    extra_args=rst2pdf_extra_args)
 
     sub_data_tree = data_tree.get("groups", None)
@@ -90,8 +94,22 @@ def cli(project_dir, verbose):
 
     project_data_tree = load_yaml_file(yaml_conf_file)
 
+    project_settings = project_data_tree["settings"]
+
     _recursively_generate_group_sheets(project_data_tree["sheet_generation"], group_breadcrumb=(), variables={},
                                            output_root_dir=output_root_dir, jinja_env=jinja_env, rst2pdf_extra_args=rst2pdf_extra_args)
+
+    if project_settings["game_facts_template"]:
+        logging.info("Processing special sheet for game facts")
+        game_facts_template_name = project_settings["game_facts_template"]
+        jinja_context = dict(facts_registry=jinja_env.facts_registry)
+        rst_content = render_with_jinja(filename=game_facts_template_name, jinja_env=jinja_env, jinja_context=jinja_context)
+        convert_rst_content_to_pdf(filepath_base=output_root_dir.joinpath("gamemasters", "game_facts"),
+                                   rst_content=rst_content,
+                                   conf_file="rst2pdf.conf",  # FIXME put a registry
+                                   extra_args=rst2pdf_extra_args)
+
+
 
 
 if __name__ == "__main__":
