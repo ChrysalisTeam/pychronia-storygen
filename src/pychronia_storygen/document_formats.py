@@ -34,6 +34,13 @@ def load_rst_file(rst_file):
         return data
 
 
+def _create_missing_parent_folders(path):
+    # Autocreate missing folders
+    folder = os.path.dirname(path)
+    assert folder  # else, naked file basename, it's not good
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+
 def _convert_special_markups_and_punctuations(text):
     text = text.replace("[BR]",
                                 textwrap.dedent("""
@@ -61,6 +68,8 @@ def _convert_special_markups_and_punctuations(text):
 
 def write_rst_file(rst_file, data):
     """
+    Creates missing folders along the way.
+
     Also converts [BR] and [PAGEBREAK] to pdf spacings, and fixes punctuation spaces, on the fly.
     """
 
@@ -72,11 +81,7 @@ def write_rst_file(rst_file, data):
 
     full_rst = _convert_special_markups_and_punctuations(full_rst)
 
-    # Autocreate missing folders
-    folder = os.path.dirname(rst_file)
-    assert folder  # else, naked file basename, it's not good
-    if not os.path.exists(folder):
-        os.makedirs(folder)
+    _create_missing_parent_folders(rst_file)
 
     with open(rst_file, "w", encoding="utf8") as f:
         f.write(full_rst)
@@ -161,6 +166,8 @@ def convert_rst_file_to_pdf(rst_file, pdf_file, conf_file="", extra_args=""):
                 conf_file=conf_file,
                 extra_args=extra_args)
 
+    _create_missing_parent_folders(pdf_file)
+
     # fit-background-mode=scale doesn't work in config file, at the moment...
     # other options: --very-verbose --show-frame-boundary or just "-v"
     command = r'''python -m rst2pdf.createpdf "%(rst_file)s" -o "%(pdf_file)s" --config=%(conf_file)s --fit-background-mode=scale --first-page-on-right --smart-quotes=2 --break-side=any  -e dotted_toc --fit-literal-mode=shrink %(extra_args)s''' % vars
@@ -173,7 +180,7 @@ def convert_rst_file_to_pdf(rst_file, pdf_file, conf_file="", extra_args=""):
     assert res == 0, "Error when calling rst2pdf"
 
 
-def convert_rst_content_to_pdf(filepath_base: Path, rst_content, conf_file="", extra_args=""):
+def convert_rst_content_to_pdf(filepath_base: Path, rst_content, conf_file="", extra_args=""):  #FIXME remove this??
     """
     We use an intermediate RST file, both for simplicity and debugging.
     """
@@ -182,3 +189,16 @@ def convert_rst_content_to_pdf(filepath_base: Path, rst_content, conf_file="", e
 
     write_rst_file(rst_file, data=rst_content)
     convert_rst_file_to_pdf(rst_file, pdf_file, conf_file=conf_file, extra_args=extra_args)
+
+
+def generate_rst_and_pdf_files(rst_content, relative_path, settings):
+    """
+    We use an intermediate RST file, both for simplicity and debugging.
+    """
+    rst_file = settings.build_root_dir.joinpath(relative_path).with_suffix(".txt")  # Better than .rst for non-techs
+
+    pdf_file = settings.output_root_dir.joinpath(relative_path).with_suffix(".pdf")
+
+    write_rst_file(rst_file, data=rst_content)
+    convert_rst_file_to_pdf(rst_file, pdf_file,
+                            conf_file=settings.rst2pdf_conf_file, extra_args=settings.rst2pdf_extra_args)
