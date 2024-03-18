@@ -112,7 +112,7 @@ def load_jinja_environment(templates_root: list, use_macro_tags: bool):
         configure_environment(jinja_env)
 
         # We do similarly to jinja_env.macros.register_from_environment(), but for RST files!
-        templates = jinja_env.macros.environment.list_templates(extensions=("rst", "txt"))
+        templates = jinja_env.macros.environment.list_templates(extensions=("rst", "txt"))  # FIXME add .j2/.jinja extensions here!
         for tpl in templates:
             logging.debug("Searching for jinja2 macros in template %s", tpl)
             jinja_env.macros.register_from_template(tpl)

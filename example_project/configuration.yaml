@@ -9,7 +9,11 @@ settings:
     "game_story_date": "March 13th, 1905"
 
   "sheets":
-    "world_history": "lore/world_history.txt"
+    "world_history":
+      "variables":
+        "world_name": "Pangea"
+      "full_sheet": "lore/world_history_full.txt"
+      "cheat_sheet": "lore/world_history_summary.txt"
 
   "groups":
 
@@ -18,19 +22,22 @@ settings:
         "intro_message": "This is an introduction message visible to all PLAYABLE character sheets !"
       "sheets":
         "hero":
-          - "characters/_common_character_introduction.txt"
-          - "characters/hero_sheet.txt"
-          - "characters/_common_character_conclusion.txt"
+          "full_sheet":
+            - "characters/_common_character_introduction.txt"
+            - "characters/hero_sheet.txt"
+            - "characters/_common_character_conclusion.txt"
         "enemy":
-          - "characters/_common_character_introduction.txt"
-          - "characters/enemy_sheet.txt"
-          - "characters/_common_character_conclusion.txt"
+          "full_sheet":
+            - "characters/_common_character_introduction.txt"
+            - "characters/enemy_sheet.txt"
+            - "characters/_common_character_conclusion.txt"
 
     "non_playable_characters":
       "variables":
         "intro_message": "This is an introduction message visible to all NON-PLAYABLE character sheets !"
       "sheets":
         "goblin":
-          - "characters/_common_character_introduction.txt"
-          - "characters/goblin_sheet.txt"
-          - "characters/_common_character_conclusion.txt"
+          "full_sheet":
+            - "characters/_common_character_introduction.txt"
+            - "characters/goblin_sheet.txt"
+            - "characters/_common_character_conclusion.txt"
