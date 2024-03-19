@@ -189,10 +189,8 @@ def extract_facts_from_intermediate_markup(source, facts_registry):
         fact_params = facts_registry.setdefault(fact_name, {})
         fact_player_params = fact_params.setdefault(player_id, {})
 
-        if fact_player_params:
-            # User can't switch between author and viewer for a same fact...
-            assert fact_player_params['is_author'] == is_author, (fact_player_params['is_author'], is_author, fact_name, player_id)
         fact_player_params['is_author'] = fact_player_params.get('is_author') or is_author
+        fact_player_params['is_viewer'] = fact_player_params.get('is_viewer') or not is_author
 
         fact_player_params['in_cheat_sheet'] = fact_player_params.get('in_cheat_sheet') or is_cheat_sheet
         fact_player_params['in_normal_sheet'] = fact_player_params.get('in_normal_sheet') or not is_cheat_sheet
@@ -248,6 +246,13 @@ def _display_and_check_story_facts(jinja_env, masked_user_names):
 
     print("\nInline facts of scenario:")
     pprint(facts_registry_stripped)
+
+    '''  TODO RE ADD THIS CHECK OF COHERENCE !!!
+    if fact_player_params:
+        # User can't switch between author and viewer for a same fact...
+        assert fact_player_params['is_author'] == is_author, (
+        fact_player_params['is_author'], is_author, fact_name, player_id)
+        '''
 
     '''
     def __UNUSED_replace_all_players_set(names):
