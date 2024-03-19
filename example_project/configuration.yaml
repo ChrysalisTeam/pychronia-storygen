@@ -3,6 +3,9 @@ settings:
   "game_facts_template": "gamemasters/game_facts_summary.txt"
   "game_symbols_template": "gamemasters/game_symbols_summary.txt"
   "game_items_template": "gamemasters/game_items_summary.txt"
+  "game_inventory_data": "gamemasters/game_inventory_data.yaml"
+  "game_inventory_per_section_template": "gamemasters/game_inventory_per_section.txt"
+  "game_inventory_per_crate_template": "gamemasters/game_inventory_per_crate.txt"
 
 "sheet_generation":
 

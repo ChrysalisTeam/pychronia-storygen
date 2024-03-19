@@ -3,6 +3,7 @@
 import logging
 import os
 from pathlib import Path
+from pprint import pprint
 
 import click
 import subprocess
@@ -12,6 +13,7 @@ from dataclasses import dataclass
 
 from pychronia_storygen.document_formats import load_yaml_file, load_jinja_environment, load_rst_file, \
     render_with_jinja_and_fact_tags, convert_rst_content_to_pdf, render_with_jinja, generate_rst_and_pdf_files
+from pychronia_storygen.inventory import analyze_and_normalize_game_items
 from pychronia_storygen.story_tags import CURRENT_PLAYER_VARNAME, IS_CHEAT_SHEET_VARNAME
 
 
@@ -136,6 +138,26 @@ def cli(project_dir, verbose):
 
     _recursively_generate_group_sheets(project_data_tree["sheet_generation"], group_breadcrumb=(), variables={},
                                        storygen_settings=storygen_settings)
+
+
+    if project_settings["game_inventory_data"]:
+        logging.info("Processing data for game inventory")
+        game_inventory_data_path = Path(project_settings["game_inventory_data"])
+        game_inventory_data = load_yaml_file(game_inventory_data_path)
+        pprint(game_inventory_data)
+        game_items_per_section, game_items_per_crate = analyze_and_normalize_game_items(game_inventory_data,
+                                                                                        important_marker="IMPORTANT")
+
+        ##parent_foler = game_inventory_data_path.parent
+        ##filename_stem = game_inventory_data_path.stem
+
+        print("---------")
+        pprint(game_items_per_section)
+        print("---------")
+        pprint(game_items_per_crate)
+
+        ##relative_basename = Path(game_inventory_data_filename).with_suffix("")
+
 
     if project_settings["game_facts_template"]:
         logging.info("Processing special sheet for game facts")

@@ -1,0 +1,15 @@
+
+"@POTIONS-AND-SCROLLS Potions and scrolls IMPORTANT":
+  - 'Potion of Ice'
+  - 'Potion of Fire {% item "potions of fire" is provided %}'
+  - 'Potion of Earth'
+  - 'Potion of Air'
+
+"@WEAPONS Miscellaneous weapons":
+  - "Long bow"
+  - "Long sword IMPORTANT"
+  - "Helmet"
+
+"Abandoned house":
+  - "@WEAPONS Old long bow"
+  - "@POTIONS-AND-SCROLLS Old potion of health"
