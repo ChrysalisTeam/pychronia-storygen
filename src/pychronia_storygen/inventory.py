@@ -19,7 +19,7 @@ def _extract_crate_name_from_title(title):
     if match:
         crate_name = match.group(0)
         new_title = new_title.replace(crate_name, "", 1)
-        crate_name = crate_name.strip()  # Remove traling space
+        crate_name = crate_name.replace("@", "", 1).strip()  # Remove @ and trailing space
     return crate_name, new_title.strip()
 
 

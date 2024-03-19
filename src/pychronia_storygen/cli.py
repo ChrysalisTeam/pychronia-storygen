@@ -12,7 +12,8 @@ from dataclasses import dataclass
 
 
 from pychronia_storygen.document_formats import load_yaml_file, load_jinja_environment, load_rst_file, \
-    render_with_jinja_and_fact_tags, convert_rst_content_to_pdf, render_with_jinja, generate_rst_and_pdf_files
+    render_with_jinja_and_fact_tags, convert_rst_content_to_pdf, render_with_jinja, generate_rst_and_pdf_files, \
+    render_with_jinja_and_convert_to_pdf
 from pychronia_storygen.inventory import analyze_and_normalize_game_items
 from pychronia_storygen.story_tags import CURRENT_PLAYER_VARNAME, IS_CHEAT_SHEET_VARNAME
 
@@ -144,51 +145,69 @@ def cli(project_dir, verbose):
         logging.info("Processing data for game inventory")
         game_inventory_data_path = Path(project_settings["game_inventory_data"])
         game_inventory_data = load_yaml_file(game_inventory_data_path)
-        pprint(game_inventory_data)
+        ##pprint(game_inventory_data)
         game_items_per_section, game_items_per_crate = analyze_and_normalize_game_items(game_inventory_data,
                                                                                         important_marker="IMPORTANT")
+        #print("---------")
+        #pprint(game_items_per_section)
+        #print("---------")
+        #pprint(game_items_per_crate)
 
-        ##parent_foler = game_inventory_data_path.parent
-        ##filename_stem = game_inventory_data_path.stem
+        # They MUST exist!
+        game_items_per_section_template_name = project_settings["game_inventory_per_section_template"]
+        game_inventory_per_crate_template_name = project_settings["game_inventory_per_crate_template"]
 
-        print("---------")
-        pprint(game_items_per_section)
-        print("---------")
-        pprint(game_items_per_crate)
+        # FIXME deduplicate this chunk:
+        jinja_context = dict(items_per_section=game_items_per_section)
+        render_with_jinja_and_convert_to_pdf(game_items_per_section_template_name, jinja_context=jinja_context, settings=storygen_settings)
+
+        #rst_content = render_with_jinja(filename=game_items_per_section_template_name, jinja_env=jinja_env, jinja_context=jinja_context)
+        #generate_rst_and_pdf_files(
+        #    rst_content=rst_content, relative_path=Path(game_items_per_section_template_name).with_suffix(""), settings=storygen_settings)
+        ###
+        jinja_context = dict(items_per_crate=game_items_per_crate)
+        render_with_jinja_and_convert_to_pdf(game_inventory_per_crate_template_name, jinja_context=jinja_context, settings=storygen_settings)
+
+        ##rst_content = render_with_jinja(filename=game_inventory_per_crate_template_name, jinja_env=jinja_env, jinja_context=jinja_context)
+        ##generate_rst_and_pdf_files(
+        ##    rst_content=rst_content, relative_path=Path(game_inventory_per_crate_template_name).with_suffix(""), settings=storygen_settings)
 
         ##relative_basename = Path(game_inventory_data_filename).with_suffix("")
-
 
     if project_settings["game_facts_template"]:
         logging.info("Processing special sheet for game facts")
         game_facts_template_name = project_settings["game_facts_template"]
         jinja_context = dict(facts_registry=jinja_env.facts_registry)
-
-        # FIXME deduplicate this chunk:
+        render_with_jinja_and_convert_to_pdf(game_facts_template_name, jinja_context=jinja_context, settings=storygen_settings)
+        '''
         rst_content = render_with_jinja(filename=game_facts_template_name, jinja_env=jinja_env, jinja_context=jinja_context)
         generate_rst_and_pdf_files(
             rst_content=rst_content, relative_path=Path(game_facts_template_name).with_suffix(""), settings=storygen_settings)
+            '''
 
     if project_settings["game_symbols_template"]:
         logging.info("Processing special sheet for game symbols")
         game_symbols_template_name = project_settings["game_symbols_template"]
         jinja_context = dict(symbols_registry=jinja_env.symbols_registry)
-
+        render_with_jinja_and_convert_to_pdf(game_symbols_template_name, jinja_context=jinja_context, settings=storygen_settings)
+        '''
         # FIXME deduplicate this chunk:
         rst_content = render_with_jinja(filename=game_symbols_template_name, jinja_env=jinja_env, jinja_context=jinja_context)
         generate_rst_and_pdf_files(
             rst_content=rst_content, relative_path=Path(game_symbols_template_name).with_suffix(""), settings=storygen_settings)
+            '''
 
     if project_settings["game_items_template"]:
         logging.info("Processing special sheet for game items")
         game_items_template_name = project_settings["game_items_template"]
         jinja_context = dict(items_registry=jinja_env.items_registry)
-
+        render_with_jinja_and_convert_to_pdf(game_items_template_name, jinja_context=jinja_context, settings=storygen_settings)
+        '''
         # FIXME deduplicate this chunk:
         rst_content = render_with_jinja(filename=game_items_template_name, jinja_env=jinja_env, jinja_context=jinja_context)
         generate_rst_and_pdf_files(
             rst_content=rst_content, relative_path=Path(game_items_template_name).with_suffix(""), settings=storygen_settings)
-
+            '''
 
 
 

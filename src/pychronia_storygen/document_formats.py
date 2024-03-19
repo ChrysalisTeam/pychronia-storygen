@@ -101,7 +101,7 @@ def load_jinja_environment(templates_root: list, use_macro_tags: bool):
                                    extensions=[StoryChecksExtension])
 
     @pass_context
-    def dangerous_render(context, value):
+    def dangerous_render(context, value):  # FIXME RENAME THIS!!!
         return render_with_jinja_and_fact_tags(content=value, jinja_env=jinja_env, jinja_context=context)
 
     jinja_env.filters['dangerous_render'] = dangerous_render
@@ -202,3 +202,21 @@ def generate_rst_and_pdf_files(rst_content, relative_path, settings):
     write_rst_file(rst_file, data=rst_content)
     convert_rst_file_to_pdf(rst_file, pdf_file,
                             conf_file=settings.rst2pdf_conf_file, extra_args=settings.rst2pdf_extra_args)
+
+
+
+####################################
+#           ALL AT ONCE            #
+####################################
+
+
+def render_with_jinja_and_convert_to_pdf(source_filename=None, *, jinja_context, settings):
+
+    rst_content = render_with_jinja(filename=source_filename, jinja_env=settings.jinja_env,
+                                    jinja_context=jinja_context)
+
+    relative_path = Path(source_filename).with_suffix("")
+    assert not relative_path.is_absolute(), relative_path
+
+    generate_rst_and_pdf_files(
+        rst_content=rst_content, relative_path=relative_path, settings=settings)
