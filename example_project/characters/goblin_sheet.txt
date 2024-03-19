@@ -6,3 +6,5 @@ This goblin secretly loves peanuts.
 {% fact "Goblin secretly loves peanuts" %}
 
 It has a big tatoo {% symbol "JOLYFELLOW" for "goblin_tattoo_text" %} on the chest, because its name is {% symbol "Jolyfellow" for "goblin_tattoo_text" %}.
+
+It knows the result of the final battle between Hero and Enemy. {% fact "Hero has defeated the enemy" %}

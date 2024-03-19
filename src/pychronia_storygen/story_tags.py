@@ -21,6 +21,8 @@ IS_CHEAT_SHEET_VARNAME = "is_cheat_sheet"
 CURRENT_PLAYER_VARNAME = "current_player_id"
 DUMMY_GAMEMASTER_NAME = "<master>"
 
+AUTHORIZED_FACT_RECIPIENTS = ["author", "viewer"]
+
 
 class StoryChecksExtension(Extension):
     """
@@ -150,6 +152,10 @@ class StoryChecksExtension(Extension):
             return ""  # we abort registration of fact
 
         as_what = as_what or "viewer"  # default status
+
+        if as_what not in AUTHORIZED_FACT_RECIPIENTS:
+            raise RuntimeError("Abnormal fact status: %r for %r (authorized: %s)" % (as_what, fact_name, AUTHORIZED_FACT_RECIPIENTS))
+
         marker = MARKER_FORMAT % dict(fact_name=fact_name, as_what=as_what,
                                       player_id=player_id, is_cheat_sheet=int(is_cheat_sheet))
         return marker  # special marker for final extraction
@@ -177,9 +183,7 @@ def extract_facts_from_intermediate_markup(source, facts_registry):
         as_what = matchobj.group("as_what")
         player_id = matchobj.group("player_id")
         is_cheat_sheet = int(matchobj.group("is_cheat_sheet"))
-
-        if as_what not in ("author", "viewer"):
-            raise RuntimeError("Abnormal fact status: %r in %r" % (as_what, matchobj.group(0)))
+        assert as_what in ("author", "viewer"), as_what
         is_author = (as_what == "author")
 
         fact_params = facts_registry.setdefault(fact_name, {})
