@@ -141,9 +141,22 @@ def cli(project_dir, verbose):
         logging.info("Processing special sheet for game facts")
         game_facts_template_name = project_settings["game_facts_template"]
         jinja_context = dict(facts_registry=jinja_env.facts_registry)
+
+        # FIXME deduplicate this chunk:
         rst_content = render_with_jinja(filename=game_facts_template_name, jinja_env=jinja_env, jinja_context=jinja_context)
         generate_rst_and_pdf_files(
             rst_content=rst_content, relative_path=Path().joinpath("gamemasters", "game_facts"), settings=storygen_settings)
+
+    if project_settings["game_symbols_template"]:
+        logging.info("Processing special sheet for game symbols")
+        game_symbols_template_name = project_settings["game_symbols_template"]
+        jinja_context = dict(symbols_registry=jinja_env.symbols_registry)
+
+        # FIXME deduplicate this chunk:
+        rst_content = render_with_jinja(filename=game_symbols_template_name, jinja_env=jinja_env, jinja_context=jinja_context)
+        generate_rst_and_pdf_files(
+            rst_content=rst_content, relative_path=Path().joinpath("gamemasters", "game_symbols"), settings=storygen_settings)
+
 
 
 
