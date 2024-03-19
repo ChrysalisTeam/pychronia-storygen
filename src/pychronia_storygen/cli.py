@@ -59,7 +59,7 @@ def _recursively_generate_group_sheets(data_tree: dict, group_breadcrumb: tuple,
             _sheet_name_tpl = "%s_cheat_sheet" if is_cheat_sheet else "%s_full_sheet"
             relative_filepath_base = relative_folders.joinpath(_sheet_name_tpl % character_name)
 
-            full_rst_content = ""
+            full_rst_content = ""   # FIXME dump this to build/ file first, to help with debugging of jinja2 errors
 
             # Be tolerant if a single string was entered
             character_sheet_files = (character_sheet_files,) if isinstance(character_sheet_files, str) else character_sheet_files
@@ -145,7 +145,7 @@ def cli(project_dir, verbose):
         # FIXME deduplicate this chunk:
         rst_content = render_with_jinja(filename=game_facts_template_name, jinja_env=jinja_env, jinja_context=jinja_context)
         generate_rst_and_pdf_files(
-            rst_content=rst_content, relative_path=Path().joinpath("gamemasters", "game_facts"), settings=storygen_settings)
+            rst_content=rst_content, relative_path=Path(game_facts_template_name).with_suffix(""), settings=storygen_settings)
 
     if project_settings["game_symbols_template"]:
         logging.info("Processing special sheet for game symbols")
@@ -155,7 +155,7 @@ def cli(project_dir, verbose):
         # FIXME deduplicate this chunk:
         rst_content = render_with_jinja(filename=game_symbols_template_name, jinja_env=jinja_env, jinja_context=jinja_context)
         generate_rst_and_pdf_files(
-            rst_content=rst_content, relative_path=Path().joinpath("gamemasters", "game_symbols"), settings=storygen_settings)
+            rst_content=rst_content, relative_path=Path(game_symbols_template_name).with_suffix(""), settings=storygen_settings)
 
     if project_settings["game_items_template"]:
         logging.info("Processing special sheet for game items")
@@ -165,7 +165,7 @@ def cli(project_dir, verbose):
         # FIXME deduplicate this chunk:
         rst_content = render_with_jinja(filename=game_items_template_name, jinja_env=jinja_env, jinja_context=jinja_context)
         generate_rst_and_pdf_files(
-            rst_content=rst_content, relative_path=Path().joinpath("gamemasters", "game_items"), settings=storygen_settings)
+            rst_content=rst_content, relative_path=Path(game_items_template_name).with_suffix(""), settings=storygen_settings)
 
 
 

@@ -1,8 +1,8 @@
 
 settings:
-  "game_facts_template": "gamemasters/game_facts.txt"
-  "game_symbols_template": "gamemasters/game_symbols.txt"
-  "game_items_template": "gamemasters/game_items.txt"
+  "game_facts_template": "gamemasters/game_facts_summary.txt"
+  "game_symbols_template": "gamemasters/game_symbols_summary.txt"
+  "game_items_template": "gamemasters/game_items_summary.txt"
 
 "sheet_generation":
 
