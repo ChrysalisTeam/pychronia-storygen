@@ -1,5 +1,5 @@
 
-Sheet for character "{{ character_name }}"
+Sheet for character "{{ sheet_name }}"
 ###############################################
 
 

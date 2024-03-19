@@ -3,6 +3,8 @@ Scenario items
 
 {% macro display_item_statuses(values) %}{% for value in values|sort %}{% if not loop.first %}, {% endif %}{{value}}{% endfor %}{% endmacro %}
 
+<{ display_scenario_errors has_serious_errors=has_serious_errors error_messages=error_messages }/>
+
 {% if items_registry %}
 
 .. list-table::

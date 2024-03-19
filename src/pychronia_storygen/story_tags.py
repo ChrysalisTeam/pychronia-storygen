@@ -1,6 +1,8 @@
 
 import copy
 import functools
+import logging
+
 import jinja2
 import os
 import re
@@ -201,24 +203,19 @@ def extract_facts_from_intermediate_markup(source, facts_registry):
     return cleaned_source
 
 
-def _display_and_check_story_items(jinja_env):
-    from pprint import pprint
-
-    print("\nInline items of scenario:")
-    pprint(jinja_env.items_registry)
-
-    has_coherence_errors = False
+def detect_game_item_errors(jinja_env):
+    has_serious_errors = False
+    error_messages = []
     items_registry_good_value = set(AUTHORIZED_ITEM_STATUSES)
     for k, v in sorted(jinja_env.items_registry.items()):
         assert v <= items_registry_good_value, (k, v)  # no weird values
         if 'needed' in v and 'provided' not in v:
-            print("!!!!! ERROR IN items registry for key", repr(k), ':', v, 'requires a provided item')
-            has_coherence_errors = True
+            error_messages.append(("ERROR", "Game item '%s' is needed but not provided" % k))
+            has_serious_errors = True
         if 'provided' in v and 'needed' not in v:
-            print("!!!!! WARNING IN items registry for key", repr(k), ':', v, 'normally requires a needed item')
-            # It's not a blocking coherence error, do don't set has_coherence_errors here
-
-    return has_coherence_errors
+            # It's not a blocking coherence error
+            error_messages.append(("WARNING", "Game item '%s' is provided but not needed" % k))
+    return has_serious_errors, error_messages
 
 
 def _display_and_check_story_symbols(jinja_env):

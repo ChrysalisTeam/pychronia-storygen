@@ -138,7 +138,7 @@ def render_with_jinja_and_fact_tags(content=None, filename=None, *, jinja_env, j
     """
     Renders content and analyses/removes the {% fact %} markers from output.
     """
-    output_tagged = render_with_jinja(content, jinja_env=jinja_env, jinja_context=jinja_context)
+    output_tagged = render_with_jinja(content=content, filename=filename, jinja_env=jinja_env, jinja_context=jinja_context)
     output = jinja_env.extract_facts_from_intermediate_markup(output_tagged)  # must exist
     return output
 

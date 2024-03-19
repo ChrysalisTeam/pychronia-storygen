@@ -15,7 +15,7 @@ from pychronia_storygen.document_formats import load_yaml_file, load_jinja_envir
     render_with_jinja_and_fact_tags, convert_rst_content_to_pdf, render_with_jinja, generate_rst_and_pdf_files, \
     render_with_jinja_and_convert_to_pdf
 from pychronia_storygen.inventory import analyze_and_normalize_game_items
-from pychronia_storygen.story_tags import CURRENT_PLAYER_VARNAME, IS_CHEAT_SHEET_VARNAME
+from pychronia_storygen.story_tags import CURRENT_PLAYER_VARNAME, IS_CHEAT_SHEET_VARNAME, detect_game_item_errors
 
 
 @dataclass
@@ -40,46 +40,43 @@ def _recursively_generate_group_sheets(data_tree: dict, group_breadcrumb: tuple,
 
     relative_folders = Path().joinpath(*group_breadcrumb)
 
-    for character_name, character_sheet_config in group_sheets.items():
+    for sheet_name, sheet_config in group_sheets.items():
 
         player_variables = variables.copy()  # IMPORTANT
         player_variables.update(group_variables)
-        player_variables.update(character_sheet_config.get("variables", {}))
-        player_variables[CURRENT_PLAYER_VARNAME] = character_name   # FIXME??
+        player_variables.update(sheet_config.get("variables", {}))
+        player_variables[CURRENT_PLAYER_VARNAME] = sheet_name   # FIXME??
 
-        logging.info("Processing sheet for group '%s' and character '%s'"  % (group_name or "<empty>", character_name))
+        logging.info("Processing sheet for group '%s' and sheet '%s'"  % (group_name or "<empty>", sheet_name))
         ##print(">>> ", character_name, character_sheet_files)
 
-
-        for (character_sheet_files, is_cheat_sheet) in [
-            (character_sheet_config.get("full_sheet", None), False),
-            (character_sheet_config.get("cheat_sheet", None), True),
+        for (sheet_parts, is_cheat_sheet) in [
+            (sheet_config.get("full_sheet", None), False),
+            (sheet_config.get("cheat_sheet", None), True),
         ]:
 
-            if not character_sheet_files:
+            if not sheet_parts:
                 continue
 
             _sheet_name_tpl = "%s_cheat_sheet" if is_cheat_sheet else "%s_full_sheet"
-            relative_filepath_base = relative_folders.joinpath(_sheet_name_tpl % character_name)
+            relative_filepath_base = relative_folders.joinpath(_sheet_name_tpl % sheet_name)
 
-            full_rst_content = ""   # FIXME dump this to build/ file first, to help with debugging of jinja2 errors
+            jinja_context = dict(
+                group_breadcrumb=group_breadcrumb,
+                group_name=group_name,
+                sheet_name=sheet_name,
+                **{IS_CHEAT_SHEET_VARNAME: is_cheat_sheet},
+                **player_variables
+            )
 
             # Be tolerant if a single string was entered
-            character_sheet_files = (character_sheet_files,) if isinstance(character_sheet_files, str) else character_sheet_files
+            sheet_parts = (sheet_parts,) if isinstance(sheet_parts, str) else sheet_parts
 
-            for sheet_file in character_sheet_files:
-                logging.debug("Rendering template file %r with jinja2", sheet_file)
-                rst_content_tpl = load_rst_file(sheet_file)
-
-                jinja_context = dict(
-                    group_breadcrumb=group_breadcrumb,
-                    group_name=group_name,
-                    character_name=character_name,   # FIXME??
-                    **{IS_CHEAT_SHEET_VARNAME: is_cheat_sheet},
-                    **player_variables
-                )
+            full_rst_content = ""
+            for sheet_part in sheet_parts:
+                logging.debug("Rendering template file %r with jinja2", sheet_part)
                 rst_content = render_with_jinja_and_fact_tags(
-                    content=rst_content_tpl,
+                    filename=sheet_part,
                     jinja_env=storygen_settings.jinja_env,
                     jinja_context=jinja_context)
                 full_rst_content += "\n\n" + rst_content
@@ -197,10 +194,14 @@ def cli(project_dir, verbose):
             rst_content=rst_content, relative_path=Path(game_symbols_template_name).with_suffix(""), settings=storygen_settings)
             '''
 
+
     if project_settings["game_items_template"]:
         logging.info("Processing special sheet for game items")
         game_items_template_name = project_settings["game_items_template"]
-        jinja_context = dict(items_registry=jinja_env.items_registry)
+        has_serious_errors, error_messages = detect_game_item_errors(jinja_env)
+        jinja_context = dict(items_registry=jinja_env.items_registry,
+                             has_serious_errors=has_serious_errors,
+                             error_messages=error_messages)
         render_with_jinja_and_convert_to_pdf(game_items_template_name, jinja_context=jinja_context, settings=storygen_settings)
         '''
         # FIXME deduplicate this chunk:
