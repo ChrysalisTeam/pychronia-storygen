@@ -22,7 +22,7 @@ CURRENT_PLAYER_VARNAME = "current_player_id"
 DUMMY_GAMEMASTER_NAME = "<master>"
 
 AUTHORIZED_FACT_RECIPIENTS = ["author", "viewer"]
-
+AUTHORIZED_ITEM_STATUSES = ['needed', 'provided']
 
 class StoryChecksExtension(Extension):
     """
@@ -36,25 +36,25 @@ class StoryChecksExtension(Extension):
     Similarly, a tag {% symbol "value" for "name" %} ensures unicity of a value amongst
     different text files, and encountered values are exposed in jinja_env.symbols_registry.
 
-    Last but not least, a tag {% hint "letter_from_x" is [needed/provided] %} exposes values in
+    Last but not least, a tag {% item "letter_from_x" is [needed/provided] %} exposes values in
     jinja_env.hints_registry, to check that hints required to solve enigmas are well listed in
     gamemaster checklists.
     """
     # a set of names that trigger the extension.
-    tags = set(['fact', 'symbol', 'hint'])
+    tags = set(['fact', 'symbol', 'item'])
 
     def __init__(self, environment):
         super(StoryChecksExtension, self).__init__(environment)
 
         self.facts_registry = {}
         self.symbols_registry = {}
-        self.hints_registry = {}
+        self.items_registry = {}
 
         ## add registries to the environment
         environment.extend(
             facts_registry=self.facts_registry,  # (fact_name -> fact_data_dict) mapping
             symbols_registry=self.symbols_registry,  # (symbol_name -> symbol_values_set) mapping
-            hints_registry=self.hints_registry,  # (hint_name -> hint_statuses_set) mapping
+            items_registry=self.items_registry,  # (items_name -> items_statuses_set) mapping
             extract_facts_from_intermediate_markup=functools.partial(extract_facts_from_intermediate_markup, facts_registry=self.facts_registry)
         )
 
@@ -125,16 +125,16 @@ class StoryChecksExtension(Extension):
 
         else:
 
-            assert tag_name.value == 'hint'
+            assert tag_name.value == 'item'
 
-            hint_name = parser.parse_primary()
+            item_name = parser.parse_primary()
 
             is_token = parser.stream.expect('name:is').value
 
-            hint_status_value = parser.stream.expect(lexer.TOKEN_NAME).value  # eg. "needed" or "provided"
-            hint_status = nodes.Const(hint_status_value)
+            item_status_value = parser.stream.expect(lexer.TOKEN_NAME).value  # eg. "needed" or "provided"
+            item_status = nodes.Const(item_status_value)
 
-            call = self.call_method('_hint_processing', [hint_name, hint_status, context], [], lineno=lineno)
+            call = self.call_method('_item_processing', [item_name, item_status, context], [], lineno=lineno)
 
         return nodes.Output([call], lineno=lineno)  # or nodes.CallBlock
 
@@ -166,9 +166,9 @@ class StoryChecksExtension(Extension):
         symbols_list.add(symbol_value)
         return symbol_value  # output the symbol itself
 
-    def _hint_processing(self, hint_name, hint_status, context):
-        hint_statuses = self.hints_registry.setdefault(hint_name, set())
-        hint_statuses.add(hint_status)
+    def _item_processing(self, item_name, item_status, context):
+        item_statuses = self.items_registry.setdefault(item_name, set())
+        item_statuses.add(item_status)
         return ""  # empty output
 
 
@@ -183,7 +183,7 @@ def extract_facts_from_intermediate_markup(source, facts_registry):
         as_what = matchobj.group("as_what")
         player_id = matchobj.group("player_id")
         is_cheat_sheet = int(matchobj.group("is_cheat_sheet"))
-        assert as_what in ("author", "viewer"), as_what
+        assert as_what in AUTHORIZED_FACT_RECIPIENTS, as_what
         is_author = (as_what == "author")
 
         fact_params = facts_registry.setdefault(fact_name, {})
@@ -201,21 +201,21 @@ def extract_facts_from_intermediate_markup(source, facts_registry):
     return cleaned_source
 
 
-def _display_and_check_story_hints(jinja_env):
+def _display_and_check_story_items(jinja_env):
     from pprint import pprint
 
-    print("\nInline hints of scenario:")
-    pprint(jinja_env.hints_registry)
+    print("\nInline items of scenario:")
+    pprint(jinja_env.items_registry)
 
     has_coherence_errors = False
-    hints_registry_good_value = set(['needed', 'provided'])
-    for k, v in sorted(jinja_env.hints_registry.items()):
-        assert v <= hints_registry_good_value, (k, v)  # no weird values
+    items_registry_good_value = set(AUTHORIZED_ITEM_STATUSES)
+    for k, v in sorted(jinja_env.items_registry.items()):
+        assert v <= items_registry_good_value, (k, v)  # no weird values
         if 'needed' in v and 'provided' not in v:
-            print("!!!!! ERROR IN hints registry for key", repr(k), ':', v, 'requires a provided hint')
+            print("!!!!! ERROR IN items registry for key", repr(k), ':', v, 'requires a provided item')
             has_coherence_errors = True
         if 'provided' in v and 'needed' not in v:
-            print("!!!!! WARNING IN hints registry for key", repr(k), ':', v, 'normally requires a needed hint')
+            print("!!!!! WARNING IN items registry for key", repr(k), ':', v, 'normally requires a needed item')
             # It's not a blocking coherence error, do don't set has_coherence_errors here
 
     return has_coherence_errors
@@ -297,7 +297,7 @@ def display_and_check_story_tags(jinja_env, masked_user_names):
 
     has_coherence_errors1, facts_summary = _display_and_check_story_facts(jinja_env, masked_user_names=masked_user_names)
     has_coherence_errors2 = _display_and_check_story_symbols(jinja_env)
-    has_coherence_errors3 = _display_and_check_story_hints(jinja_env)
+    has_coherence_errors3 = _display_and_check_story_items(jinja_env)
 
     has_any_coherence_error = has_coherence_errors1 or has_coherence_errors2 or has_coherence_errors3
 

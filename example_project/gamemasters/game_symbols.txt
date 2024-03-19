@@ -1,9 +1,7 @@
 Scenario symbols
-==============================================
+======================
 
-
-
-{% macro display_values(values) %}{% for value in values|sort %}{% if not loop.first %}, {% endif %}{{value}}{% endfor %}{% endmacro %}
+{% macro display_symbol_values(values) %}{% for value in values|sort %}{% if not loop.first %}, {% endif %}{{value}}{% endfor %}{% endmacro %}
 
 {% if symbols_registry %}
 
@@ -16,13 +14,13 @@ Scenario symbols
    * - Symbol name
      - Symbol value(s)
 
-{% for symbol_name, symbol_values in symbols_registry.items() %}
-   * - {{symbol_name}}
-     - {{display_values(symbol_values)}}
+{% for symbol_name, symbol_values in symbols_registry.items()|sort %}
+   * - {{ symbol_name }}
+     - {{ display_symbol_values(symbol_values) }}
 {% endfor %}
 
 {% else %}
 
-*No symbols have been found in scenario documents.*
+*No game symbols have been found in scenario documents.*
 
 {% endif %}

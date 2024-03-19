@@ -157,6 +157,16 @@ def cli(project_dir, verbose):
         generate_rst_and_pdf_files(
             rst_content=rst_content, relative_path=Path().joinpath("gamemasters", "game_symbols"), settings=storygen_settings)
 
+    if project_settings["game_items_template"]:
+        logging.info("Processing special sheet for game items")
+        game_items_template_name = project_settings["game_items_template"]
+        jinja_context = dict(items_registry=jinja_env.items_registry)
+
+        # FIXME deduplicate this chunk:
+        rst_content = render_with_jinja(filename=game_items_template_name, jinja_env=jinja_env, jinja_context=jinja_context)
+        generate_rst_and_pdf_files(
+            rst_content=rst_content, relative_path=Path().joinpath("gamemasters", "game_items"), settings=storygen_settings)
+
 
 
 

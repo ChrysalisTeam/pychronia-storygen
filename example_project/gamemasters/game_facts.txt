@@ -1,7 +1,7 @@
 Facts and involved characters
-==============================================
+====================================
 
-{% macro display_names(listing) %}{% for name, data in listing.items()|sort %}{% if not loop.first %}, {% endif %}{% if data["is_author"] %}**{% endif %}{{name}}{% if data["is_author"] %}**{% endif %}{% if data["in_cheat_sheet"] %}\*{% endif %}{% endfor %}{% endmacro %}
+{% macro display_fact_names(listing) %}{% for name, data in listing.items()|sort %}{% if not loop.first %}, {% endif %}{% if data["is_author"] %}**{% endif %}{{name}}{% if data["is_author"] %}**{% endif %}{% if data["in_cheat_sheet"] %}\*{% endif %}{% endfor %}{% endmacro %}
 
 {% if facts_registry %}
 
@@ -11,16 +11,16 @@ Facts and involved characters
    :widths: 50 50
    :header-rows: 1
 
-   * - Action or fact
-     - Knower(s)
+   * - Fact name
+     - Fact knower(s)
 
-{% for fact, knowers in facts_registry.items() %}
-   * - {{fact}}
-     - {{display_names(knowers)}}
+{% for fact, knowers in facts_registry.items()|sort %}
+   * - {{ fact }}
+     - {{ display_fact_names(knowers) }}
 {% endfor %}
 
 {% else %}
 
-*No facts have been found in scenario documents.*
+*No game facts have been found in scenario documents.*
 
 {% endif %}

@@ -2,6 +2,7 @@
 settings:
   "game_facts_template": "gamemasters/game_facts.txt"
   "game_symbols_template": "gamemasters/game_symbols.txt"
+  "game_items_template": "gamemasters/game_items.txt"
 
 "sheet_generation":
 
