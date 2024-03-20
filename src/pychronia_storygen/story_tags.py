@@ -180,7 +180,7 @@ def extract_facts_from_intermediate_markup(source, facts_registry):
     """
 
     def process_fact(matchobj):
-        print(">> WE PROCESS FACT", matchobj.groups())
+        #print(">> WE PROCESS FACT", matchobj.groups())
         fact_name = matchobj.group("fact_name")
         as_what = matchobj.group("as_what")
         player_id = matchobj.group("player_id")

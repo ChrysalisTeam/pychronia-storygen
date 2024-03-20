@@ -102,33 +102,66 @@ def _recursively_generate_group_sheets(data_tree: dict, group_breadcrumb: tuple,
 
 
 def _generate_inventory_files(inventory_name, inventory_config, storygen_settings: StorygenSettings):
-    logging.info("Processing data for game inventory")
+
+    logging.info("Analysing data for game inventory '%s'" % inventory_name)
     inventory_data_path = Path(inventory_config["inventory_data"])
     inventory_data = load_yaml_file(inventory_data_path)
-    ##pprint(game_inventory_data)
     game_items_per_section, game_items_per_crate = analyze_and_normalize_game_items(
         inventory_data, important_marker="IMPORTANT")
-    # print("---------")
-    # pprint(game_items_per_section)
-    # print("---------")
-    # pprint(game_items_per_crate)
 
     inventory_per_section_template_name = inventory_config["inventory_per_section_template"]
     inventory_per_section_destination = inventory_config["inventory_per_section_destination"]
     inventory_per_crate_template_name = inventory_config["inventory_per_crate_template"]
     inventory_per_crate_destination = inventory_config["inventory_per_crate_destination"]
 
+    base_context = dict(inventory_name=inventory_name)
+
     if inventory_per_section_template_name and inventory_per_section_destination:
-        jinja_context = dict(items_per_section=game_items_per_section)
+        logging.info("Processing per-section sheet for game inventory '%s'" % inventory_name)
+        jinja_context = dict(**base_context, items_per_section=game_items_per_section)
         render_with_jinja_and_convert_to_pdf(inventory_per_section_template_name,
                                              relative_path=Path(inventory_per_section_destination),
                                              jinja_context=jinja_context,
                                              settings=storygen_settings)
 
     if inventory_per_crate_template_name and inventory_per_crate_destination:
-        jinja_context = dict(items_per_crate=game_items_per_crate)
+        logging.info("Processing per-crate sheet for game inventory '%s'" % inventory_name)
+        jinja_context = dict(**base_context, items_per_crate=game_items_per_crate)
         render_with_jinja_and_convert_to_pdf(inventory_per_crate_template_name,
                                              relative_path=Path(inventory_per_crate_destination),
+                                             jinja_context=jinja_context,
+                                             settings=storygen_settings)
+
+
+def _generate_summary_files(summary_config, storygen_settings: StorygenSettings):
+
+    if summary_config["game_facts_template"] and summary_config["game_facts_destination"]:
+        logging.info("Processing special sheet for game facts")
+        game_facts_template_name = summary_config["game_facts_template"]
+        jinja_context = dict(facts_registry=storygen_settings.jinja_env.facts_registry)  # FIXME DETECT ERRORS FIRST
+        render_with_jinja_and_convert_to_pdf(game_facts_template_name,
+                                             relative_path=Path(summary_config["game_facts_destination"]),
+                                             jinja_context=jinja_context,
+                                             settings=storygen_settings)
+
+    if summary_config["game_symbols_template"] and summary_config["game_symbols_destination"]:
+        logging.info("Processing special sheet for game symbols")
+        game_symbols_template_name = summary_config["game_symbols_template"]
+        jinja_context = dict(symbols_registry=storygen_settings.jinja_env.symbols_registry)  # FIXME DETECT ERRORS FIRST
+        render_with_jinja_and_convert_to_pdf(game_symbols_template_name,
+                                             relative_path=Path(summary_config["game_symbols_destination"]),
+                                             jinja_context=jinja_context,
+                                             settings=storygen_settings)
+
+    if summary_config["game_items_template"] and summary_config["game_items_destination"]:
+        logging.info("Processing special sheet for game items")
+        game_items_template_name = summary_config["game_items_template"]
+        has_serious_errors, error_messages = detect_game_item_errors(storygen_settings.jinja_env)
+        jinja_context = dict(items_registry=storygen_settings.jinja_env.items_registry,
+                             has_serious_errors=has_serious_errors,
+                             error_messages=error_messages)
+        render_with_jinja_and_convert_to_pdf(game_items_template_name,
+                                             relative_path=Path(summary_config["game_items_destination"]),
                                              jinja_context=jinja_context,
                                              settings=storygen_settings)
 
@@ -156,8 +189,6 @@ def cli(project_dir, verbose):
 
     project_data_tree = load_yaml_file(yaml_conf_file)
 
-    project_settings = project_data_tree["settings"]
-
     storygen_settings = StorygenSettings(
         build_root_dir=build_root_dir,
         output_root_dir=output_root_dir,
@@ -166,7 +197,9 @@ def cli(project_dir, verbose):
         rst2pdf_extra_args=""  # FIXME??
     )
 
-    _recursively_generate_group_sheets(project_data_tree["sheet_generation"], group_breadcrumb=(), variables={},
+    _recursively_generate_group_sheets(project_data_tree["sheet_generation"],
+                                       group_breadcrumb=(),
+                                       variables={},
                                        storygen_settings=storygen_settings)
 
     # GENERATE INVENTORIES
@@ -175,46 +208,9 @@ def cli(project_dir, verbose):
         for inventory_name, inventory_config in inventory_generation_tree.items():
             _generate_inventory_files(inventory_name, inventory_config=inventory_config, storygen_settings=storygen_settings)
 
-
-    if project_settings["game_facts_template"]:
-        logging.info("Processing special sheet for game facts")
-        game_facts_template_name = project_settings["game_facts_template"]
-        jinja_context = dict(facts_registry=jinja_env.facts_registry)
-        render_with_jinja_and_convert_to_pdf(game_facts_template_name, jinja_context=jinja_context, settings=storygen_settings)
-        '''
-        rst_content = render_with_jinja(filename=game_facts_template_name, jinja_env=jinja_env, jinja_context=jinja_context)
-        generate_rst_and_pdf_files(
-            rst_content=rst_content, relative_path=Path(game_facts_template_name).with_suffix(""), settings=storygen_settings)
-            '''
-
-    if project_settings["game_symbols_template"]:
-        logging.info("Processing special sheet for game symbols")
-        game_symbols_template_name = project_settings["game_symbols_template"]
-        jinja_context = dict(symbols_registry=jinja_env.symbols_registry)
-        render_with_jinja_and_convert_to_pdf(game_symbols_template_name, jinja_context=jinja_context, settings=storygen_settings)
-        '''
-        # FIXME deduplicate this chunk:
-        rst_content = render_with_jinja(filename=game_symbols_template_name, jinja_env=jinja_env, jinja_context=jinja_context)
-        generate_rst_and_pdf_files(
-            rst_content=rst_content, relative_path=Path(game_symbols_template_name).with_suffix(""), settings=storygen_settings)
-            '''
-
-
-    if project_settings["game_items_template"]:
-        logging.info("Processing special sheet for game items")
-        game_items_template_name = project_settings["game_items_template"]
-        has_serious_errors, error_messages = detect_game_item_errors(jinja_env)
-        jinja_context = dict(items_registry=jinja_env.items_registry,
-                             has_serious_errors=has_serious_errors,
-                             error_messages=error_messages)
-        render_with_jinja_and_convert_to_pdf(game_items_template_name, jinja_context=jinja_context, settings=storygen_settings)
-        '''
-        # FIXME deduplicate this chunk:
-        rst_content = render_with_jinja(filename=game_items_template_name, jinja_env=jinja_env, jinja_context=jinja_context)
-        generate_rst_and_pdf_files(
-            rst_content=rst_content, relative_path=Path(game_items_template_name).with_suffix(""), settings=storygen_settings)
-            '''
-
+    # GENERATE SUMMARIES
+    summary_config = project_data_tree["summary_generation"]
+    _generate_summary_files(summary_config, storygen_settings=storygen_settings)
 
 
 
