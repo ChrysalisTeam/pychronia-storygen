@@ -218,19 +218,15 @@ def detect_game_item_errors(jinja_env):
     return has_serious_errors, error_messages
 
 
-def _display_and_check_story_symbols(jinja_env):
-    from pprint import pprint
-
-    print("\nInline symbols of scenario:")
-    pprint(jinja_env.symbols_registry)
-
-    has_coherence_errors = False
+def detect_game_symbol_errors(jinja_env):
+    has_serious_errors = False
+    error_messages = []
     for k, v in jinja_env.symbols_registry.items():
         unique_values = set(x.strip().lower().replace("\n", "") for x in v)
         if len(unique_values) != 1:
-            print("!!!!! ERROR IN symbols registry for key", k, ':', v)
-            has_coherence_errors = True
-    return has_coherence_errors
+            error_messages.append(("ERROR", "Game symbol '%s' has several different values: %s" % (k, v)))
+            has_serious_errors = True
+    return has_serious_errors, error_messages
 
 
 def _display_and_check_story_facts(jinja_env, masked_user_names):

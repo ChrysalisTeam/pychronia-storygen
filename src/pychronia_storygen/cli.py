@@ -15,7 +15,8 @@ from pychronia_storygen.document_formats import load_yaml_file, load_jinja_envir
     render_with_jinja_and_fact_tags, convert_rst_content_to_pdf, render_with_jinja, generate_rst_and_pdf_files, \
     render_with_jinja_and_convert_to_pdf
 from pychronia_storygen.inventory import analyze_and_normalize_game_items
-from pychronia_storygen.story_tags import CURRENT_PLAYER_VARNAME, IS_CHEAT_SHEET_VARNAME, detect_game_item_errors
+from pychronia_storygen.story_tags import CURRENT_PLAYER_VARNAME, IS_CHEAT_SHEET_VARNAME, detect_game_item_errors, \
+    detect_game_symbol_errors
 
 
 @dataclass
@@ -147,7 +148,10 @@ def _generate_summary_files(summary_config, storygen_settings: StorygenSettings)
     if summary_config["game_symbols_template"] and summary_config["game_symbols_destination"]:
         logging.info("Processing special sheet for game symbols")
         game_symbols_template_name = summary_config["game_symbols_template"]
-        jinja_context = dict(symbols_registry=storygen_settings.jinja_env.symbols_registry)  # FIXME DETECT ERRORS FIRST
+        has_serious_errors, error_messages = detect_game_symbol_errors(storygen_settings.jinja_env)
+        jinja_context = dict(symbols_registry=storygen_settings.jinja_env.symbols_registry,
+                             has_serious_errors=has_serious_errors,
+                             error_messages=error_messages)
         render_with_jinja_and_convert_to_pdf(game_symbols_template_name,
                                              relative_path=Path(summary_config["game_symbols_destination"]),
                                              jinja_context=jinja_context,

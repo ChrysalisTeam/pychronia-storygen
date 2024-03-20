@@ -3,6 +3,8 @@ Scenario symbols
 
 {% macro display_symbol_values(values) %}{% for value in values|sort %}{% if not loop.first %}, {% endif %}{{value}}{% endfor %}{% endmacro %}
 
+<{ display_scenario_errors has_serious_errors=has_serious_errors error_messages=error_messages }/>
+
 {% if symbols_registry %}
 
 *Symbol values are still considered the same if they vary only by casing or inserted newlines.*
