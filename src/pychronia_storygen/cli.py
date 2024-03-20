@@ -101,6 +101,38 @@ def _recursively_generate_group_sheets(data_tree: dict, group_breadcrumb: tuple,
 
 
 
+def _generate_inventory_files(inventory_name, inventory_config, storygen_settings: StorygenSettings):
+    logging.info("Processing data for game inventory")
+    inventory_data_path = Path(inventory_config["inventory_data"])
+    inventory_data = load_yaml_file(inventory_data_path)
+    ##pprint(game_inventory_data)
+    game_items_per_section, game_items_per_crate = analyze_and_normalize_game_items(
+        inventory_data, important_marker="IMPORTANT")
+    # print("---------")
+    # pprint(game_items_per_section)
+    # print("---------")
+    # pprint(game_items_per_crate)
+
+    inventory_per_section_template_name = inventory_config["inventory_per_section_template"]
+    inventory_per_section_destination = inventory_config["inventory_per_section_destination"]
+    inventory_per_crate_template_name = inventory_config["inventory_per_crate_template"]
+    inventory_per_crate_destination = inventory_config["inventory_per_crate_destination"]
+
+    if inventory_per_section_template_name and inventory_per_section_destination:
+        jinja_context = dict(items_per_section=game_items_per_section)
+        render_with_jinja_and_convert_to_pdf(inventory_per_section_template_name,
+                                             relative_path=Path(inventory_per_section_destination),
+                                             jinja_context=jinja_context,
+                                             settings=storygen_settings)
+
+    if inventory_per_crate_template_name and inventory_per_crate_destination:
+        jinja_context = dict(items_per_crate=game_items_per_crate)
+        render_with_jinja_and_convert_to_pdf(inventory_per_crate_template_name,
+                                             relative_path=Path(inventory_per_crate_destination),
+                                             jinja_context=jinja_context,
+                                             settings=storygen_settings)
+
+
 @click.command()
 @click.argument('project_dir', type=click.Path(exists=True, file_okay=False))
 @click.option('--verbose', '-v', is_flag=True, help="Print more output.")
@@ -137,39 +169,12 @@ def cli(project_dir, verbose):
     _recursively_generate_group_sheets(project_data_tree["sheet_generation"], group_breadcrumb=(), variables={},
                                        storygen_settings=storygen_settings)
 
+    # GENERATE INVENTORIES
+    inventory_generation_tree = project_data_tree["inventory_generation"]
+    if inventory_generation_tree:
+        for inventory_name, inventory_config in inventory_generation_tree.items():
+            _generate_inventory_files(inventory_name, inventory_config=inventory_config, storygen_settings=storygen_settings)
 
-    if project_settings["game_inventory_data"]:
-        logging.info("Processing data for game inventory")
-        game_inventory_data_path = Path(project_settings["game_inventory_data"])
-        game_inventory_data = load_yaml_file(game_inventory_data_path)
-        ##pprint(game_inventory_data)
-        game_items_per_section, game_items_per_crate = analyze_and_normalize_game_items(game_inventory_data,
-                                                                                        important_marker="IMPORTANT")
-        #print("---------")
-        #pprint(game_items_per_section)
-        #print("---------")
-        #pprint(game_items_per_crate)
-
-        # They MUST exist!
-        game_items_per_section_template_name = project_settings["game_inventory_per_section_template"]
-        game_inventory_per_crate_template_name = project_settings["game_inventory_per_crate_template"]
-
-        # FIXME deduplicate this chunk:
-        jinja_context = dict(items_per_section=game_items_per_section)
-        render_with_jinja_and_convert_to_pdf(game_items_per_section_template_name, jinja_context=jinja_context, settings=storygen_settings)
-
-        #rst_content = render_with_jinja(filename=game_items_per_section_template_name, jinja_env=jinja_env, jinja_context=jinja_context)
-        #generate_rst_and_pdf_files(
-        #    rst_content=rst_content, relative_path=Path(game_items_per_section_template_name).with_suffix(""), settings=storygen_settings)
-        ###
-        jinja_context = dict(items_per_crate=game_items_per_crate)
-        render_with_jinja_and_convert_to_pdf(game_inventory_per_crate_template_name, jinja_context=jinja_context, settings=storygen_settings)
-
-        ##rst_content = render_with_jinja(filename=game_inventory_per_crate_template_name, jinja_env=jinja_env, jinja_context=jinja_context)
-        ##generate_rst_and_pdf_files(
-        ##    rst_content=rst_content, relative_path=Path(game_inventory_per_crate_template_name).with_suffix(""), settings=storygen_settings)
-
-        ##relative_basename = Path(game_inventory_data_filename).with_suffix("")
 
     if project_settings["game_facts_template"]:
         logging.info("Processing special sheet for game facts")
