@@ -203,11 +203,11 @@ def extract_facts_from_intermediate_markup(source, facts_registry):
     return cleaned_source
 
 
-def detect_game_item_errors(jinja_env):
+def detect_game_item_errors(items_registry):
     has_serious_errors = False
     error_messages = []
     items_registry_good_value = set(AUTHORIZED_ITEM_STATUSES)
-    for k, v in sorted(jinja_env.items_registry.items()):
+    for k, v in sorted(items_registry.items()):
         assert v <= items_registry_good_value, (k, v)  # no weird values
         if 'needed' in v and 'provided' not in v:
             error_messages.append(("ERROR", "Game item '%s' is needed but not provided" % k))
@@ -218,10 +218,10 @@ def detect_game_item_errors(jinja_env):
     return has_serious_errors, error_messages
 
 
-def detect_game_symbol_errors(jinja_env):
+def detect_game_symbol_errors(symbols_registry):
     has_serious_errors = False
     error_messages = []
-    for k, v in jinja_env.symbols_registry.items():
+    for k, v in sorted(symbols_registry.items()):
         unique_values = set(x.strip().lower().replace("\n", "") for x in v)
         if len(unique_values) != 1:
             error_messages.append(("ERROR", "Game symbol '%s' has several different values: %s" % (k, v)))
@@ -229,24 +229,7 @@ def detect_game_symbol_errors(jinja_env):
     return has_serious_errors, error_messages
 
 
-def _display_and_check_story_facts(jinja_env, masked_user_names):
-    from pprint import pprint
-    assert isinstance(masked_user_names, (set, tuple, list)), repr(masked_user_names)
-
-    __masked_user_names = list(masked_user_names) + [StoryChecksExtension.DUMMY_GAMEMASTER_NAME]  # FIXME UNUSED
-
-    facts_registry_stripped = [(k, sorted(v)) for (k, v) in jinja_env.facts_registry.items()]
-
-    print("\nInline facts of scenario:")
-    pprint(facts_registry_stripped)
-
-    '''  TODO RE ADD THIS CHECK OF COHERENCE !!!
-    if fact_player_params:
-        # User can't switch between author and viewer for a same fact...
-        assert fact_player_params['is_author'] == is_author, (
-        fact_player_params['is_author'], is_author, fact_name, player_id)
-        '''
-
+def detect_game_fact_errors(facts_registry):
     '''
     def __UNUSED_replace_all_players_set(names):
         """When all real players know a fact, replace their names by a symbol"""
@@ -258,33 +241,43 @@ def _display_and_check_story_facts(jinja_env, masked_user_names):
         return new_set
     '''
 
-    has_coherence_errors = False
+    has_serious_errors = False
+    error_messages = []
 
     def _check_fact_leaf(fact_name, player_id, fact_node):
         """Ensure that the knowledge of a single player over a single fact is coherent"""
-        assert fact_node["in_normal_sheet"] or fact_node["in_cheat_sheet"], fact_node
-        _has_coherence_errors = False
+        assert fact_node["in_normal_sheet"] or fact_node["in_cheat_sheet"], fact_node  # Sanity check
+        assert fact_node["is_author"] or fact_node["is_viewer"], fact_node  # Sanity check
+        _has_serious_errors = False
+        _error_messages = []
+
         if fact_node["in_cheat_sheet"]:
             if not fact_node["in_normal_sheet"]:  # all facts must be explained in normal sheets
-                print("!!!!! ERROR IN fact leaf for key", fact_name, ':', player_id, fact_node)
-                _has_coherence_errors = True
-        return _has_coherence_errors
+                _error_messages.append(("ERROR", "Game fact '%s' is in cheat-sheet but not in full-sheet for character '%s'" % (fact_name, player_id)))
+                _has_serious_errors = True
+        if fact_node["is_author"] and fact_node["is_viewer"]:
+            _error_messages.append(("ERROR", "Game fact '%s' has character '%s' marked as both author and viewer for it" % (fact_name, player_id)))
+            _has_serious_errors = True
+        return _has_serious_errors, _error_messages
 
-    facts_items = sorted(jinja_env.facts_registry.items())
+    facts_items = sorted(facts_registry.items())
 
     for (fact_name, fact_data) in facts_items:
         for player_id, fact_node in fact_data.items():
-            has_coherence_errors = _check_fact_leaf(fact_name, player_id=player_id, fact_node=fact_node) or has_coherence_errors
+            _has_serious_errors, _error_messages = _check_fact_leaf(
+                fact_name, player_id=player_id, fact_node=fact_node)
+            has_serious_errors = has_serious_errors or _has_serious_errors
+            error_messages.extend(_error_messages)
 
+    return has_serious_errors, error_messages
+    '''
     facts_summary = [(fact_name,  # .replace("_", " "),
                       sorted((x, y) for (x, y) in fact_data.items()
                              if y["is_author"] and x not in masked_user_names),
                       sorted((x, y) for (x, y) in fact_data.items()
                              if not y["is_author"] and x not in masked_user_names))
                      for (fact_name, fact_data) in facts_items]
-
-    return has_coherence_errors, facts_summary
-
+    '''
 
 def display_and_check_story_tags(jinja_env, masked_user_names):
 

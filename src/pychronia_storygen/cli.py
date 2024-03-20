@@ -16,7 +16,7 @@ from pychronia_storygen.document_formats import load_yaml_file, load_jinja_envir
     render_with_jinja_and_convert_to_pdf
 from pychronia_storygen.inventory import analyze_and_normalize_game_items
 from pychronia_storygen.story_tags import CURRENT_PLAYER_VARNAME, IS_CHEAT_SHEET_VARNAME, detect_game_item_errors, \
-    detect_game_symbol_errors
+    detect_game_symbol_errors, detect_game_fact_errors
 
 
 @dataclass
@@ -139,7 +139,11 @@ def _generate_summary_files(summary_config, storygen_settings: StorygenSettings)
     if summary_config["game_facts_template"] and summary_config["game_facts_destination"]:
         logging.info("Processing special sheet for game facts")
         game_facts_template_name = summary_config["game_facts_template"]
-        jinja_context = dict(facts_registry=storygen_settings.jinja_env.facts_registry)  # FIXME DETECT ERRORS FIRST
+        has_serious_errors, error_messages = detect_game_fact_errors(storygen_settings.jinja_env.facts_registry)
+        print(">>> AFCTS", has_serious_errors, error_messages)
+        jinja_context = dict(facts_registry=storygen_settings.jinja_env.facts_registry,
+                             has_serious_errors=has_serious_errors,
+                             error_messages=error_messages)
         render_with_jinja_and_convert_to_pdf(game_facts_template_name,
                                              relative_path=Path(summary_config["game_facts_destination"]),
                                              jinja_context=jinja_context,
@@ -148,7 +152,7 @@ def _generate_summary_files(summary_config, storygen_settings: StorygenSettings)
     if summary_config["game_symbols_template"] and summary_config["game_symbols_destination"]:
         logging.info("Processing special sheet for game symbols")
         game_symbols_template_name = summary_config["game_symbols_template"]
-        has_serious_errors, error_messages = detect_game_symbol_errors(storygen_settings.jinja_env)
+        has_serious_errors, error_messages = detect_game_symbol_errors(storygen_settings.jinja_env.symbols_registry)
         jinja_context = dict(symbols_registry=storygen_settings.jinja_env.symbols_registry,
                              has_serious_errors=has_serious_errors,
                              error_messages=error_messages)
@@ -160,7 +164,7 @@ def _generate_summary_files(summary_config, storygen_settings: StorygenSettings)
     if summary_config["game_items_template"] and summary_config["game_items_destination"]:
         logging.info("Processing special sheet for game items")
         game_items_template_name = summary_config["game_items_template"]
-        has_serious_errors, error_messages = detect_game_item_errors(storygen_settings.jinja_env)
+        has_serious_errors, error_messages = detect_game_item_errors(storygen_settings.jinja_env.items_registry)
         jinja_context = dict(items_registry=storygen_settings.jinja_env.items_registry,
                              has_serious_errors=has_serious_errors,
                              error_messages=error_messages)
