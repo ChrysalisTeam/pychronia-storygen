@@ -62,6 +62,7 @@ def _convert_special_markups_and_punctuations(text):
     # Basic fixing of orphan punctuation marks for FR language...
     text = (text.replace(" !", u"\u00A0!")
                 .replace(" ?", u"\u00A0?")
+                .replace(" ;", u"\u00A0;")
                 .replace(" :\n", u"\u00A0:\n"))  # beware about RST directives here...
     return text
 
