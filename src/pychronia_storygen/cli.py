@@ -193,6 +193,7 @@ def _generate_summary_files(summary_config, storygen_settings: StorygenSettings)
                                              jinja_context=jinja_context,
                                              settings=storygen_settings)
 
+    logging.info("Processing final results of scenario coherence analysis")
     _handle_analysis_results(
             has_serious_errors=any([has_serious_errors1, has_serious_errors2, has_serious_errors3]),
             error_messages=error_messages1 + error_messages2 + error_messages3
@@ -210,8 +211,17 @@ def _handle_analysis_results(has_serious_errors, error_messages):
 @click.command()
 @click.argument('project_dir', type=click.Path(exists=True, file_okay=False))
 @click.option('--verbose', '-v', is_flag=True, help="Print more output.")
-def cli(project_dir, verbose):
-    print("HELLO STARTING")
+@click.option("-t", "--type", "selected_asset_types", type=click.Choice(['sheets', 'documents', 'inventories'], case_sensitive=False),
+                            multiple=True, help="Select the types of assets to generate")
+def cli(project_dir, verbose, selected_asset_types):
+    print("HELLO STARTING", selected_asset_types)
+
+    def _is_asset_type_enabled(_type):
+        assert _type.lower() == _type, _type
+        if _type == "summaries":
+            return (not selected_asset_types)  # We only generate summaries if ALL other assets have been generated too!
+        return (not selected_asset_types) or (_type in selected_asset_types)
+
     logging.basicConfig(level=(logging.DEBUG if verbose else logging.INFO))
 
     logging.debug("Switching to current working directory: %s", project_dir)
@@ -238,27 +248,31 @@ def cli(project_dir, verbose):
         rst2pdf_extra_args=""  # FIXME??
     )
 
-    # GENERATE FULL SHEETS AND CHEAT SHEETS
-    _recursively_generate_group_sheets(project_data_tree["sheet_generation"],
-                                       group_breadcrumb=(),
-                                       variables={},
-                                       storygen_settings=storygen_settings)
+    if _is_asset_type_enabled("sheets"):
+        # GENERATE FULL SHEETS AND CHEAT SHEETS
+        _recursively_generate_group_sheets(project_data_tree["sheet_generation"],
+                                           group_breadcrumb=(),
+                                           variables={},
+                                           storygen_settings=storygen_settings)
 
-    # GENERATE GAME DOCUMENTS
-    document_generation_tree = project_data_tree["document_generation"]
-    if document_generation_tree:
-        for document_bundle_name, document_config in document_generation_tree.items():
-            _generate_document_files(document_bundle_name, document_config=document_config, storygen_settings=storygen_settings)
+    if _is_asset_type_enabled("documents"):
+        # GENERATE GAME DOCUMENTS
+        document_generation_tree = project_data_tree["document_generation"]
+        if document_generation_tree:
+            for document_bundle_name, document_config in document_generation_tree.items():
+                _generate_document_files(document_bundle_name, document_config=document_config, storygen_settings=storygen_settings)
 
-    # GENERATE INVENTORIES
-    inventory_generation_tree = project_data_tree["inventory_generation"]
-    if inventory_generation_tree:
-        for inventory_name, inventory_config in inventory_generation_tree.items():
-            _generate_inventory_files(inventory_name, inventory_config=inventory_config, storygen_settings=storygen_settings)
+    if _is_asset_type_enabled("inventories"):
+        # GENERATE INVENTORIES
+        inventory_generation_tree = project_data_tree["inventory_generation"]
+        if inventory_generation_tree:
+            for inventory_name, inventory_config in inventory_generation_tree.items():
+                _generate_inventory_files(inventory_name, inventory_config=inventory_config, storygen_settings=storygen_settings)
 
-    # GENERATE SUMMARIES
-    summary_config = project_data_tree["summary_generation"]
-    _generate_summary_files(summary_config, storygen_settings=storygen_settings)
+    if _is_asset_type_enabled("summaries"):
+        # GENERATE SUMMARIES
+        summary_config = project_data_tree["summary_generation"]
+        _generate_summary_files(summary_config, storygen_settings=storygen_settings)
 
 
 
