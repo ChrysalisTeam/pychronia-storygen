@@ -26,6 +26,10 @@ DUMMY_GAMEMASTER_NAME = "<master>"
 AUTHORIZED_FACT_RECIPIENTS = ["author", "viewer"]
 AUTHORIZED_ITEM_STATUSES = ['needed', 'provided']
 
+ERROR_LEVEL_MARKER = "ERROR"
+WARNING_LEVEL_MARKER = "WARNING"
+
+
 class StoryChecksExtension(Extension):
     """
     With this extension, used via render_with_jinja_and_fact_tags(), coherence of
@@ -210,11 +214,11 @@ def detect_game_item_errors(items_registry):
     for k, v in sorted(items_registry.items()):
         assert v <= items_registry_good_value, (k, v)  # no weird values
         if 'needed' in v and 'provided' not in v:
-            error_messages.append(("ERROR", "Game item '%s' is needed but not provided" % k))
+            error_messages.append((ERROR_LEVEL_MARKER, "Game item '%s' is needed but not provided" % k))
             has_serious_errors = True
         if 'provided' in v and 'needed' not in v:
             # It's not a blocking coherence error
-            error_messages.append(("WARNING", "Game item '%s' is provided but not needed" % k))
+            error_messages.append((WARNING_LEVEL_MARKER, "Game item '%s' is provided but not needed" % k))
     return has_serious_errors, error_messages
 
 
@@ -224,7 +228,7 @@ def detect_game_symbol_errors(symbols_registry):
     for k, v in sorted(symbols_registry.items()):
         unique_values = set(x.strip().lower().replace("\n", "") for x in v)
         if len(unique_values) != 1:
-            error_messages.append(("ERROR", "Game symbol '%s' has several different values: %s" % (k, v)))
+            error_messages.append((ERROR_LEVEL_MARKER, "Game symbol '%s' has several different values: %s" % (k, v)))
             has_serious_errors = True
     return has_serious_errors, error_messages
 
@@ -253,10 +257,10 @@ def detect_game_fact_errors(facts_registry):
 
         if fact_node["in_cheat_sheet"]:
             if not fact_node["in_normal_sheet"]:  # all facts must be explained in normal sheets
-                _error_messages.append(("ERROR", "Game fact '%s' is in cheat-sheet but not in full-sheet for character '%s'" % (fact_name, player_id)))
+                _error_messages.append((ERROR_LEVEL_MARKER, "Game fact '%s' is in cheat-sheet but not in full-sheet for character '%s'" % (fact_name, player_id)))
                 _has_serious_errors = True
         if fact_node["is_author"] and fact_node["is_viewer"]:
-            _error_messages.append(("ERROR", "Game fact '%s' has character '%s' marked as both author and viewer for it" % (fact_name, player_id)))
+            _error_messages.append((ERROR_LEVEL_MARKER, "Game fact '%s' has character '%s' marked as both author and viewer for it" % (fact_name, player_id)))
             _has_serious_errors = True
         return _has_serious_errors, _error_messages
 

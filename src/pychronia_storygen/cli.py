@@ -75,14 +75,14 @@ def _recursively_generate_group_sheets(data_tree: dict, group_breadcrumb: tuple,
 
             full_rst_content = ""
             for sheet_part in sheet_parts:
-                logging.debug("Rendering template file %r with jinja2", sheet_part)
+                logging.debug("Rendering template file '%s' with jinja2", sheet_part)
                 rst_content = render_with_jinja_and_fact_tags(
                     filename=sheet_part,
                     jinja_env=storygen_settings.jinja_env,
                     jinja_context=jinja_context)
                 full_rst_content += "\n\n" + rst_content
 
-            logging.debug("Writing RST and PDF files with filename base %s", relative_filepath_base)
+            logging.debug("Writing RST and PDF files with filename base '%s'", relative_filepath_base)
             generate_rst_and_pdf_files(
                 rst_content=full_rst_content, relative_path=relative_filepath_base, settings=storygen_settings)
 
@@ -112,6 +112,7 @@ def _generate_inventory_files(inventory_name, inventory_config, storygen_setting
 
     inventory_per_section_template_name = inventory_config["inventory_per_section_template"]
     inventory_per_section_destination = inventory_config["inventory_per_section_destination"]
+
     inventory_per_crate_template_name = inventory_config["inventory_per_crate_template"]
     inventory_per_crate_destination = inventory_config["inventory_per_crate_destination"]
 
@@ -134,16 +135,22 @@ def _generate_inventory_files(inventory_name, inventory_config, storygen_setting
                                              settings=storygen_settings)
 
 
+def _handle_analysis_results(has_serious_errors, error_messages):
+    if has_serious_errors:
+        logging.critical("Serious coherence errors were detected during the processing of scenario data, see details below")
+    for criticity, message in error_messages:
+        logger_func = logging.error if criticity == "ERROR" else logging.warning
+        logger_func(message)
+
 def _generate_summary_files(summary_config, storygen_settings: StorygenSettings):
 
     if summary_config["game_facts_template"] and summary_config["game_facts_destination"]:
         logging.info("Processing special sheet for game facts")
         game_facts_template_name = summary_config["game_facts_template"]
-        has_serious_errors, error_messages = detect_game_fact_errors(storygen_settings.jinja_env.facts_registry)
-        print(">>> AFCTS", has_serious_errors, error_messages)
+        has_serious_errors1, error_messages1 = detect_game_fact_errors(storygen_settings.jinja_env.facts_registry)
         jinja_context = dict(facts_registry=storygen_settings.jinja_env.facts_registry,
-                             has_serious_errors=has_serious_errors,
-                             error_messages=error_messages)
+                             has_serious_errors=has_serious_errors1,
+                             error_messages=error_messages1)
         render_with_jinja_and_convert_to_pdf(game_facts_template_name,
                                              relative_path=Path(summary_config["game_facts_destination"]),
                                              jinja_context=jinja_context,
@@ -152,10 +159,10 @@ def _generate_summary_files(summary_config, storygen_settings: StorygenSettings)
     if summary_config["game_symbols_template"] and summary_config["game_symbols_destination"]:
         logging.info("Processing special sheet for game symbols")
         game_symbols_template_name = summary_config["game_symbols_template"]
-        has_serious_errors, error_messages = detect_game_symbol_errors(storygen_settings.jinja_env.symbols_registry)
+        has_serious_errors2, error_messages2 = detect_game_symbol_errors(storygen_settings.jinja_env.symbols_registry)
         jinja_context = dict(symbols_registry=storygen_settings.jinja_env.symbols_registry,
-                             has_serious_errors=has_serious_errors,
-                             error_messages=error_messages)
+                             has_serious_errors=has_serious_errors2,
+                             error_messages=error_messages2)
         render_with_jinja_and_convert_to_pdf(game_symbols_template_name,
                                              relative_path=Path(summary_config["game_symbols_destination"]),
                                              jinja_context=jinja_context,
@@ -164,15 +171,19 @@ def _generate_summary_files(summary_config, storygen_settings: StorygenSettings)
     if summary_config["game_items_template"] and summary_config["game_items_destination"]:
         logging.info("Processing special sheet for game items")
         game_items_template_name = summary_config["game_items_template"]
-        has_serious_errors, error_messages = detect_game_item_errors(storygen_settings.jinja_env.items_registry)
+        has_serious_errors3, error_messages3 = detect_game_item_errors(storygen_settings.jinja_env.items_registry)
         jinja_context = dict(items_registry=storygen_settings.jinja_env.items_registry,
-                             has_serious_errors=has_serious_errors,
-                             error_messages=error_messages)
+                             has_serious_errors=has_serious_errors3,
+                             error_messages=error_messages3)
         render_with_jinja_and_convert_to_pdf(game_items_template_name,
                                              relative_path=Path(summary_config["game_items_destination"]),
                                              jinja_context=jinja_context,
                                              settings=storygen_settings)
 
+    _handle_analysis_results(
+            has_serious_errors=any([has_serious_errors1, has_serious_errors2, has_serious_errors3]),
+            error_messages=error_messages1 + error_messages2 + error_messages3
+    )
 
 @click.command()
 @click.argument('project_dir', type=click.Path(exists=True, file_okay=False))
@@ -205,6 +216,7 @@ def cli(project_dir, verbose):
         rst2pdf_extra_args=""  # FIXME??
     )
 
+    # GENERATE FULL SHEETS AND CHEAT SHEETS
     _recursively_generate_group_sheets(project_data_tree["sheet_generation"],
                                        group_breadcrumb=(),
                                        variables={},
