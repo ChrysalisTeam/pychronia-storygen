@@ -17,9 +17,9 @@ from markupsafe import Markup
 from pychronia_storygen.story_tags import StoryChecksExtension
 
 
-##################################
-#  LOAD AND WRIT YAML/RST FILES  #
-##################################
+###################################
+#  LOAD AND WRITE YAML/RST FILES  #
+###################################
 
 
 def load_yaml_file(yaml_file):
@@ -142,6 +142,20 @@ def render_with_jinja_and_fact_tags(content=None, filename=None, *, jinja_env, j
     output = jinja_env.extract_facts_from_intermediate_markup(output_tagged)  # must exist
     return output
 
+
+###################################
+#      LOAD DOCUMENT FILES        #
+###################################
+
+
+def extract_ingame_clues_text_from_odt(clues_file):
+    """
+    Extract texts and comments from LibreOffice ODT file.
+    """
+    from . import odt2txt
+    odt = odt2txt.OpenDocumentTextFile(clues_file)
+    text = odt.toString()
+    return text
 
 
 

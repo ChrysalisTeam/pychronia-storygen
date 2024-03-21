@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 from pychronia_storygen.document_formats import load_yaml_file, load_jinja_environment, load_rst_file, \
     render_with_jinja_and_fact_tags, convert_rst_content_to_pdf, render_with_jinja, generate_rst_and_pdf_files, \
-    render_with_jinja_and_convert_to_pdf
+    render_with_jinja_and_convert_to_pdf, extract_ingame_clues_text_from_odt
 from pychronia_storygen.inventory import analyze_and_normalize_game_items
 from pychronia_storygen.story_tags import CURRENT_PLAYER_VARNAME, IS_CHEAT_SHEET_VARNAME, detect_game_item_errors, \
     detect_game_symbol_errors, detect_game_fact_errors
@@ -134,13 +134,20 @@ def _generate_inventory_files(inventory_name, inventory_config, storygen_setting
                                              jinja_context=jinja_context,
                                              settings=storygen_settings)
 
+def _generate_document_files(document_bundle_name, document_config, storygen_settings: StorygenSettings):
+    logging.info("Processing generation of game document bundle '%s'" % document_bundle_name)
+    document_source = document_config["document_source"]
+    document_text = extract_ingame_clues_text_from_odt(document_source)
 
-def _handle_analysis_results(has_serious_errors, error_messages):
-    if has_serious_errors:
-        logging.critical("Serious coherence errors were detected during the processing of scenario data, see details below")
-    for criticity, message in error_messages:
-        logger_func = logging.error if criticity == "ERROR" else logging.warning
-        logger_func(message)
+    # No need for rendered output, we just fill game-tags registries
+    render_with_jinja_and_fact_tags(
+        content=document_text,
+        jinja_env=storygen_settings.jinja_env,
+        jinja_context=dict(document_bundle_name=document_bundle_name))
+
+    #document_splitting = document_config["document_splitting"]
+
+
 
 def _generate_summary_files(summary_config, storygen_settings: StorygenSettings):
 
@@ -185,6 +192,15 @@ def _generate_summary_files(summary_config, storygen_settings: StorygenSettings)
             error_messages=error_messages1 + error_messages2 + error_messages3
     )
 
+
+def _handle_analysis_results(has_serious_errors, error_messages):
+    if has_serious_errors:
+        logging.critical("Serious coherence errors were detected during the processing of scenario data, see details below")
+    for criticity, message in error_messages:
+        logger_func = logging.error if criticity == "ERROR" else logging.warning
+        logger_func(message)
+
+
 @click.command()
 @click.argument('project_dir', type=click.Path(exists=True, file_okay=False))
 @click.option('--verbose', '-v', is_flag=True, help="Print more output.")
@@ -221,6 +237,12 @@ def cli(project_dir, verbose):
                                        group_breadcrumb=(),
                                        variables={},
                                        storygen_settings=storygen_settings)
+
+    # GENERATE GAME DOCUMENTS
+    document_generation_tree = project_data_tree["document_generation"]
+    if document_generation_tree:
+        for document_bundle_name, document_config in document_generation_tree.items():
+            _generate_document_files(document_bundle_name, document_config=document_config, storygen_settings=storygen_settings)
 
     # GENERATE INVENTORIES
     inventory_generation_tree = project_data_tree["inventory_generation"]

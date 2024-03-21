@@ -19,6 +19,13 @@ summary_generation:
     "inventory_per_crate_template": "inventories/game_inventory_per_crate.txt"
     "inventory_per_crate_destination": "inventories/main_inventory_per_crate"
 
+"document_generation":
+  "game_paper_clues":
+    "document_source": "documents/clues_for_game.odt"
+    "document_splitting":
+      - ["recipes_of_potions", 2]
+      - ["useless_secret_messages", 1]
+
 "sheet_generation":
 
   "variables":

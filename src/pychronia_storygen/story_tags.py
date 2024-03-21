@@ -2,6 +2,7 @@
 import copy
 import functools
 import logging
+from pprint import pprint
 
 import jinja2
 import os
@@ -48,6 +49,11 @@ class StoryChecksExtension(Extension):
     """
     # a set of names that trigger the extension.
     tags = set(['fact', 'symbol', 'item'])
+
+    @staticmethod
+    def _normalize_title_string(title):
+        """Important, else the fact-extractor REGEX will not work for example"""
+        return title.replace("\r\n", "").replace("\n", "").strip()
 
     def __init__(self, environment):
         super(StoryChecksExtension, self).__init__(environment)
@@ -146,8 +152,12 @@ class StoryChecksExtension(Extension):
 
     def _fact_processing(self, fact_name, as_what, context):
 
+        fact_name = self._normalize_title_string(fact_name)
+
         player_id = context.get(CURRENT_PLAYER_VARNAME, DUMMY_GAMEMASTER_NAME)  # FIXME CHANGE THIS NAME
         is_cheat_sheet = context.get(IS_CHEAT_SHEET_VARNAME, False)
+
+        ##print(">> >> PROCESSING FACT", fact_name, as_what, player_id)
 
         # if "mytest" in fact_name:
         #    print(">> >> PROCESSING FACT", fact_name, as_what, player_id)
@@ -155,6 +165,7 @@ class StoryChecksExtension(Extension):
         #    traceback.print_stack()
 
         if player_id is None:
+            logging.debug("Aborting registration of fact '%s' because player-id is set to None", fact_name)
             return ""  # we abort registration of fact
 
         as_what = as_what or "viewer"  # default status
@@ -168,11 +179,13 @@ class StoryChecksExtension(Extension):
 
     def _symbol_processing(self, symbol_name, symbol_value, context):
         assert symbol_name, (symbol_name, symbol_value)
+        symbol_name = self._normalize_title_string(symbol_name)
         symbols_list = self.symbols_registry.setdefault(symbol_name, set())
         symbols_list.add(symbol_value)
         return symbol_value  # output the symbol itself
 
     def _item_processing(self, item_name, item_status, context):
+        item_name = self._normalize_title_string(item_name)
         item_statuses = self.items_registry.setdefault(item_name, set())
         item_statuses.add(item_status)
         return ""  # empty output
@@ -183,8 +196,8 @@ def extract_facts_from_intermediate_markup(source, facts_registry):
     Browse a transformed output, and extract facts from the special markup left in it by StoryChecksExtension.
     """
 
-    def process_fact(matchobj):
-        #print(">> WE PROCESS FACT", matchobj.groups())
+    def _process_fact(matchobj):
+        ##print(">> WE GATHER FACT", matchobj.groups())
         fact_name = matchobj.group("fact_name")
         as_what = matchobj.group("as_what")
         player_id = matchobj.group("player_id")
@@ -203,7 +216,7 @@ def extract_facts_from_intermediate_markup(source, facts_registry):
 
         return ""  # REMOVE OUTPUT
 
-    cleaned_source = re.sub(MARKER_REGEX, process_fact, source, flags=0)
+    cleaned_source = re.sub(MARKER_REGEX, _process_fact, source, flags=0)
     return cleaned_source
 
 
@@ -226,7 +239,7 @@ def detect_game_symbol_errors(symbols_registry):
     has_serious_errors = False
     error_messages = []
     for k, v in sorted(symbols_registry.items()):
-        unique_values = set(x.strip().lower().replace("\n", "") for x in v)
+        unique_values = set(x.lower() for x in v)  # Case-isnensitive, and we could go further to NORMALIZE
         if len(unique_values) != 1:
             error_messages.append((ERROR_LEVEL_MARKER, "Game symbol '%s' has several different values: %s" % (k, v)))
             has_serious_errors = True
@@ -244,6 +257,9 @@ def detect_game_fact_errors(facts_registry):
             new_set = names_set
         return new_set
     '''
+
+    ##print(">> FACTS")
+    ##pprint(facts_registry)
 
     has_serious_errors = False
     error_messages = []
