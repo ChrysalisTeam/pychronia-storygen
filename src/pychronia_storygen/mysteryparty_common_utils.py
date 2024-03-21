@@ -6,26 +6,6 @@ import rpg_sheet_generator as rpg
 
 
 
-def analyze_and_normalize_game_items(game_items_raw, important_marker: str):
-    """Detect game items as normal or important, and buidl a data tree including this information"""
-    game_items = []
-    for pair in game_items_raw:
-        assert len(pair) == 2, pair
-        section, item_titles = pair
-        section_item_structs = []
-        section_is_important = (important_marker in section)
-        section = section.replace(important_marker, "")
-        for item_title in item_titles:
-            title_is_important = (important_marker in item_title)
-            item_title = item_title.replace(important_marker, "").strip()
-            section_item_struct = {
-                "item_is_important": section_is_important or title_is_important,
-                "item_label": item_title
-            }
-            section_item_structs.append(section_item_struct)
-        game_items.append((section, section_item_structs))
-    return game_items
-
 
 
 def page_breaker(jinja_context):
@@ -72,33 +52,6 @@ def _extract_ingame_clues_text_from_docx(clues_file):
     # we may also use "img_dir" parameter to write images in /tmp/img_dir
     text = docx2txt.process(clues_file)
     return text
-
-
-
-def _generate_clues_pdfs_from_main_odt_document(input_doc, clues_parts, output_dir):
-    current_page = 1
-    for idx, (basename, pages_count) in enumerate(clues_parts):
-        prefix = ""  # or ("%02d_" % idx) if debugging needed
-        output_pdf = os.path.join(output_dir, prefix + basename + ".pdf")
-        variables = dict(input=input_doc,
-                         output=output_pdf,
-                         page_range='%s-%s' % (current_page, current_page + pages_count - 1))
-        cmd = 'python unoconv.py -f pdf -o "%(output)s" -e PageRange=%(page_range)s "%(input)s"' % variables
-        print(cmd)
-        os.system(cmd)
-
-        # IMPORTANT - remove GAMEMASTER ANNOTATIONS from PDF file
-        # BEWARE, this seems to CORRUPT a bit the PDF, find a better REGEX someday
-        with open(output_pdf, 'rb') as f:
-            data = f.read()
-        assert b'Annots' in data  # all clues have annotations regarding their purposes
-        regex = br'/Annots\s*\[[^]]+\]'
-        data = re.sub(regex, b'', data, flags=re.MULTILINE)
-        assert b'Annots' not in data  # no more clues VISIBLE (but still present in sources alas)
-        with open(output_pdf, 'wb') as f:
-            f.write(data)
-
-        current_page += pages_count
 
 
 

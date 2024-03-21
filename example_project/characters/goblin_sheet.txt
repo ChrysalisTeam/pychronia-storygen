@@ -4,7 +4,7 @@ This is the character sheet for a random Goblin that players will meet along the
 
 This goblin secretly loves peanuts. {% fact "Goblin secretly loves peanuts" %}
 
-It can give adventurers some Potions of Fire. {% item "potions of fire XXX" is needed %}
+It can give adventurers some Potions of Fire. {% item "potions of fire" is needed %}
 
 It has a big tatoo {% symbol "JOLYFELLOW" for "goblin_tattoo_text" %} on the chest, because its name is {% symbol "Jolyfellow" for "goblin_tattoo_text" %}.
 

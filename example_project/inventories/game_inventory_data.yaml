@@ -1,9 +1,10 @@
 
 "@POTIONS-AND-SCROLLS Potions and scrolls IMPORTANT":
   - 'Potion of Ice'
-  - 'Potion of Fire {% item "potions of fire" is provided %}'
+  - 'Potion of Fire  {% item "potions of fire" is provided %}'
   - 'Potion of Earth'
   - 'Potion of Air'
+  - 'Potion of Octopus Tentacle  {% item "potion of octopus tentacle" is provided %}'
 
 "@WEAPONS Miscellaneous weapons":
   - "Long bow"

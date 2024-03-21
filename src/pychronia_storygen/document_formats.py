@@ -148,7 +148,7 @@ def render_with_jinja_and_fact_tags(content=None, filename=None, *, jinja_env, j
 ###################################
 
 
-def extract_ingame_clues_text_from_odt(clues_file):
+def extract_text_from_odt_file(clues_file):
     """
     Extract texts and comments from LibreOffice ODT file.
     """
@@ -156,6 +156,44 @@ def extract_ingame_clues_text_from_odt(clues_file):
     odt = odt2txt.OpenDocumentTextFile(clues_file)
     text = odt.toString()
     return text
+
+
+
+def split_odt_file_into_separate_documents(input_filename, splits_config, output_dir):
+    input_filename = os.path.abspath(os.path.normpath(input_filename))
+    output_dir = os.path.abspath(os.path.normpath(output_dir))
+    os.makedirs(output_dir, exist_ok=True)
+
+    unoconv_script = os.path.join(os.path.dirname(__file__), 'unoconv.py')
+
+    current_page = 1
+    for idx, (basename, page_count) in enumerate(splits_config):
+        prefix = ""  # or ("%02d_" % idx) if debugging needed
+        output_filename = os.path.join(output_dir, prefix + basename + ".pdf")
+        variables = dict(python_executable=sys.executable,
+                         unoconv_script=unoconv_script,
+                         input=input_filename,
+                         output=output_filename,
+                         page_range='%s-%s' % (current_page, current_page + page_count - 1))
+        cmd = '%(python_executable)s "%(unoconv_script)s" -f pdf -o "%(output)s" -e PageRange=%(page_range)s "%(input)s"' % variables
+        logging.debug("Splitting PDF with command: %s", cmd)
+        res = os.system(cmd)
+        assert res == 0, "Error during pdf-splitting command execution"
+
+        # IMPORTANT - remove GAMEMASTER ANNOTATIONS from PDF file
+        # (BEWARE, this seems to CORRUPT a bit the PDF, find a better REGEX someday?)
+        with open(output_filename, 'rb') as f:
+            data = f.read()
+        if b'Annots' not in data :
+            logging.warning("No annotations/comments found in PDF document '%s', each separate game document should have its own for the gamemasters",output_filename)
+        else:
+            regex = br'/Annots\s*\[[^]]+\]'
+            data = re.sub(regex, b'', data, flags=re.MULTILINE)
+            assert b'Annots' not in data  # no more clues VISIBLE (but they are still hidden in PDF file alas)
+            with open(output_filename, 'wb') as f:
+                f.write(data)
+
+        current_page += page_count
 
 
 
@@ -184,6 +222,7 @@ def convert_rst_file_to_pdf(rst_file, pdf_file, conf_file="", extra_args=""):
 
     # fit-background-mode=scale doesn't work in config file, at the moment...
     # other options: --very-verbose --show-frame-boundary or just "-v"
+    # FIXME replace this by lIBRARY CALL!!
     command = r'''python -m rst2pdf.createpdf "%(rst_file)s" -o "%(pdf_file)s" --config=%(conf_file)s --fit-background-mode=scale --first-page-on-right --smart-quotes=2 --break-side=any  -e dotted_toc --fit-literal-mode=shrink %(extra_args)s''' % vars
 
     #print("Current directory: %s" % os.getcwd())

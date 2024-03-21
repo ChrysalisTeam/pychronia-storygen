@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 from pychronia_storygen.document_formats import load_yaml_file, load_jinja_environment, load_rst_file, \
     render_with_jinja_and_fact_tags, convert_rst_content_to_pdf, render_with_jinja, generate_rst_and_pdf_files, \
-    render_with_jinja_and_convert_to_pdf, extract_ingame_clues_text_from_odt
+    render_with_jinja_and_convert_to_pdf, extract_text_from_odt_file, split_odt_file_into_separate_documents
 from pychronia_storygen.inventory import analyze_and_normalize_game_items
 from pychronia_storygen.story_tags import CURRENT_PLAYER_VARNAME, IS_CHEAT_SHEET_VARNAME, detect_game_item_errors, \
     detect_game_symbol_errors, detect_game_fact_errors
@@ -137,7 +137,7 @@ def _generate_inventory_files(inventory_name, inventory_config, storygen_setting
 def _generate_document_files(document_bundle_name, document_config, storygen_settings: StorygenSettings):
     logging.info("Processing generation of game document bundle '%s'" % document_bundle_name)
     document_source = document_config["document_source"]
-    document_text = extract_ingame_clues_text_from_odt(document_source)
+    document_text = extract_text_from_odt_file(document_source)
 
     # No need for rendered output, we just fill game-tags registries
     render_with_jinja_and_fact_tags(
@@ -145,8 +145,14 @@ def _generate_document_files(document_bundle_name, document_config, storygen_set
         jinja_env=storygen_settings.jinja_env,
         jinja_context=dict(document_bundle_name=document_bundle_name))
 
-    #document_splitting = document_config["document_splitting"]
-
+    # We then split the PDF into parts
+    output_relative_dir, ext = os.path.splitext(document_source)  # The basename becomes the name of the target FOLDER
+    output_dir = storygen_settings.output_root_dir.joinpath(output_relative_dir)
+    document_splitting = document_config["document_splitting"]
+    split_odt_file_into_separate_documents(
+        document_config["document_source"],
+        splits_config=document_splitting,
+        output_dir=output_dir)
 
 
 def _generate_summary_files(summary_config, storygen_settings: StorygenSettings):
@@ -195,7 +201,7 @@ def _generate_summary_files(summary_config, storygen_settings: StorygenSettings)
 
 def _handle_analysis_results(has_serious_errors, error_messages):
     if has_serious_errors:
-        logging.critical("Serious coherence errors were detected during the processing of scenario data, see details below")
+        logging.critical("*** Serious coherence errors were detected during the processing of scenario data, see details below ***")
     for criticity, message in error_messages:
         logger_func = logging.error if criticity == "ERROR" else logging.warning
         logger_func(message)
