@@ -22,6 +22,7 @@ from pychronia_storygen.story_tags import CURRENT_PLAYER_VARNAME, IS_CHEAT_SHEET
 @dataclass
 class StorygenSettings:
     """Settings for the whole processing pipeline"""
+    project_root_dir: str
     build_root_dir: str
     output_root_dir: str
     jinja_env: object
@@ -215,6 +216,7 @@ def _handle_analysis_results(has_serious_errors, error_messages):
                             multiple=True, help="Select the types of assets to generate")
 def cli(project_dir, verbose, selected_asset_types):
     print("HELLO STARTING", selected_asset_types)
+    project_dir = os.path.abspath(project_dir).rstrip("\\/") + os.path.sep
 
     def _is_asset_type_enabled(_type):
         assert _type.lower() == _type, _type
@@ -241,6 +243,7 @@ def cli(project_dir, verbose, selected_asset_types):
     project_data_tree = load_yaml_file(yaml_conf_file)
 
     storygen_settings = StorygenSettings(
+        project_root_dir=project_dir,
         build_root_dir=build_root_dir,
         output_root_dir=output_root_dir,
         jinja_env=jinja_env,
@@ -252,7 +255,7 @@ def cli(project_dir, verbose, selected_asset_types):
         # GENERATE FULL SHEETS AND CHEAT SHEETS
         _recursively_generate_group_sheets(project_data_tree["sheet_generation"],
                                            group_breadcrumb=(),
-                                           variables={},
+                                           variables={ "project_dir": project_dir.replace("\\", "/") },
                                            storygen_settings=storygen_settings)
 
     if _is_asset_type_enabled("documents"):
