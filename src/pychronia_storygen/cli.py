@@ -9,6 +9,7 @@ import click
 import subprocess
 import glob
 from dataclasses import dataclass
+from types import MappingProxyType
 
 
 from pychronia_storygen.document_formats import load_yaml_file, load_jinja_environment, load_rst_file, \
@@ -17,6 +18,13 @@ from pychronia_storygen.document_formats import load_yaml_file, load_jinja_envir
 from pychronia_storygen.inventory import analyze_and_normalize_game_items
 from pychronia_storygen.story_tags import CURRENT_PLAYER_VARNAME, IS_CHEAT_SHEET_VARNAME, detect_game_item_errors, \
     detect_game_symbol_errors, detect_game_fact_errors
+
+
+def frozenmap(map, **kwargs):
+    """Creates an immutable dict, used for hierarchical context variables"""
+    new_dict = map.copy()
+    new_dict.update(kwargs)
+    return MappingProxyType(new_dict)
 
 
 @dataclass
@@ -33,22 +41,21 @@ class StorygenSettings:
 def _recursively_generate_group_sheets(data_tree: dict, group_breadcrumb: tuple, variables: dict,
                                        storygen_settings: StorygenSettings):
 
-    group_variables = data_tree.get("variables", {})
+
+    group_variables = frozenmap(data_tree.get("variables", {}))
     group_sheets = data_tree["sheets"]
     group_name = group_breadcrumb[-1] if group_breadcrumb else None  # LAST group name of the chain
 
-    cumulated_variables = variables.copy()  # IMPORTANT
-    cumulated_variables.update(group_variables)
+    group_cumulated_variables = frozenmap(variables, **group_variables)  # IMPORTANT
 
     relative_folders = Path().joinpath(*group_breadcrumb)
 
     for sheet_name, sheet_config in group_sheets.items():
 
-        player_variables = variables.copy()  # IMPORTANT
-        player_variables.update(group_variables)
-        player_variables.update(sheet_config.get("variables", {}))
-        player_variables[CURRENT_PLAYER_VARNAME] = sheet_name   # FIXME??
-
+        _player_variables = frozenmap(sheet_config.get("variables", {}))
+        player_cumulated_variables = frozenmap(group_cumulated_variables,
+                                               **_player_variables,
+                                               **{CURRENT_PLAYER_VARNAME: sheet_name})  # FIXME??
         logging.info("Processing sheet for group '%s' and sheet '%s'"  % (group_name or "<empty>", sheet_name))
         ##print(">>> ", character_name, character_sheet_files)
 
@@ -68,7 +75,7 @@ def _recursively_generate_group_sheets(data_tree: dict, group_breadcrumb: tuple,
                 group_name=group_name,
                 sheet_name=sheet_name,
                 **{IS_CHEAT_SHEET_VARNAME: is_cheat_sheet},
-                **player_variables
+                **player_cumulated_variables
             )
 
             # Be tolerant if a single string was entered
@@ -98,7 +105,7 @@ def _recursively_generate_group_sheets(data_tree: dict, group_breadcrumb: tuple,
         for group_name, group_data_tree in sub_data_tree.items():
             _recursively_generate_group_sheets(group_data_tree,
                                                group_breadcrumb=group_breadcrumb + (group_name,),
-                                               variables=cumulated_variables,
+                                               variables=group_cumulated_variables,
                                                storygen_settings=storygen_settings)
 
 
@@ -215,7 +222,7 @@ def _handle_analysis_results(has_serious_errors, error_messages):
 @click.option("-t", "--type", "selected_asset_types", type=click.Choice(['sheets', 'documents', 'inventories'], case_sensitive=False),
                             multiple=True, help="Select the types of assets to generate")
 def cli(project_dir, verbose, selected_asset_types):
-    print("HELLO STARTING", selected_asset_types)
+    ##print("HELLO STARTING", selected_asset_types)
     project_dir = os.path.abspath(project_dir).rstrip("\\/") + os.path.sep
 
     def _is_asset_type_enabled(_type):
@@ -247,15 +254,15 @@ def cli(project_dir, verbose, selected_asset_types):
         build_root_dir=build_root_dir,
         output_root_dir=output_root_dir,
         jinja_env=jinja_env,
-        rst2pdf_conf_file="rst2pdf.conf",  # FIXME??
-        rst2pdf_extra_args=""  # FIXME??
+        rst2pdf_conf_file="themes/rst2pdf.conf",  # FIXME??
+        rst2pdf_extra_args="--stylesheets=layout_large_fonts",  # ,with_cover_and_background
     )
 
     if _is_asset_type_enabled("sheets"):
         # GENERATE FULL SHEETS AND CHEAT SHEETS
         _recursively_generate_group_sheets(project_data_tree["sheet_generation"],
                                            group_breadcrumb=(),
-                                           variables={ "project_dir": project_dir.replace("\\", "/") },
+                                           variables=frozenmap({ "project_dir": project_dir.replace("\\", "/") }),
                                            storygen_settings=storygen_settings)
 
     if _is_asset_type_enabled("documents"):
