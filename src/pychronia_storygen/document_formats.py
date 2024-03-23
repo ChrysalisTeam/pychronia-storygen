@@ -245,18 +245,19 @@ def convert_rst_content_to_pdf(filepath_base: Path, rst_content, conf_file="", e
     convert_rst_file_to_pdf(rst_file, pdf_file, conf_file=conf_file, extra_args=extra_args)
 
 
-def generate_rst_and_pdf_files(rst_content, relative_path, settings):
+def generate_rst_and_pdf_files(rst_content, relative_path, storygen_settings):
     """
     We use an intermediate RST file, both for simplicity and debugging.
     """
     assert not Path(relative_path).is_absolute(), relative_path
-    rst_file = settings.build_root_dir.joinpath(relative_path).with_suffix(".txt")  # Better than .rst for non-techs
+    rst_file = storygen_settings.build_root_dir.joinpath(relative_path).with_suffix(".txt")  # Better than .rst for non-techs
 
-    pdf_file = settings.output_root_dir.joinpath(relative_path).with_suffix(".pdf")
+    pdf_file = storygen_settings.output_root_dir.joinpath(relative_path).with_suffix(".pdf")
 
     write_rst_file(rst_file, data=rst_content)
     convert_rst_file_to_pdf(rst_file, pdf_file,
-                            conf_file=settings.rst2pdf_conf_file, extra_args=settings.rst2pdf_extra_args)
+                            conf_file=storygen_settings.dynamic_settings.get("rst2pdf_conf_file", ""),
+                            extra_args=storygen_settings.dynamic_settings.get("rst2pdf_extra_args", ""))
 
 
 
@@ -265,13 +266,13 @@ def generate_rst_and_pdf_files(rst_content, relative_path, settings):
 ####################################
 
 
-def render_with_jinja_and_convert_to_pdf(source_filename=None, *, relative_path=None, jinja_context, settings):
+def render_with_jinja_and_convert_to_pdf(source_filename=None, *, relative_path=None, jinja_context, storygen_settings):
 
-    rst_content = render_with_jinja(filename=source_filename, jinja_env=settings.jinja_env,
+    rst_content = render_with_jinja(filename=source_filename, jinja_env=storygen_settings.jinja_env,
                                     jinja_context=jinja_context)
 
     relative_path = relative_path or Path(source_filename).with_suffix("")
     assert not relative_path.is_absolute(), relative_path
 
     generate_rst_and_pdf_files(
-        rst_content=rst_content, relative_path=relative_path, settings=settings)
+        rst_content=rst_content, relative_path=relative_path, storygen_settings=storygen_settings)
