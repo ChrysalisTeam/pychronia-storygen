@@ -17,8 +17,8 @@ from markupsafe import Markup
 
 
 # Markers inserted into RST chunks, to be recognized later when generating full sheets
-MARKER_FORMAT = r'{#>%(fact_name)s|%(as_what)s|%(player_id)s|%(is_cheat_sheet)s<#}'
-MARKER_REGEX = r'\{#>(?P<fact_name>.*?)\|(?P<as_what>.*?)\|(?P<player_id>.*?)\|(?P<is_cheat_sheet>.*?)<#\}'
+MARKER_FORMAT = r'{#>%(fact_name)s||%(as_what)s||%(player_id)s||%(is_cheat_sheet)s||%(no_output)s<#}'
+MARKER_REGEX = r'\{#>(?P<fact_name>.+)\|\|(?P<as_what>.*)\|\|(?P<player_id>.*)\|\|(?P<is_cheat_sheet>.+)\|\|(?P<no_output>.+)<#\}'
 
 IS_CHEAT_SHEET_VARNAME = "is_cheat_sheet"
 CURRENT_PLAYER_VARNAME = "current_player_id"
@@ -48,7 +48,7 @@ class StoryChecksExtension(Extension):
     gamemaster checklists.
     """
     # a set of names that trigger the extension.
-    tags = set(['fact', 'symbol', 'item'])
+    tags = set(['fact','xfact', 'symbol', 'xsymbol', 'item', 'xitem'])
 
     @staticmethod
     def _normalize_title_string(title):
@@ -78,11 +78,13 @@ class StoryChecksExtension(Extension):
         # the first token is the token that started the tag.
         # We get the line number so that we can give
         # that line number to the nodes we create by hand.
-        tag_name = next(parser.stream)  # gives a Token(lineno, type, value)
-        lineno = tag_name.lineno
+        tag_name_token = next(parser.stream)  # gives a Token(lineno, type, value)
+        lineno = tag_name_token.lineno
+        tag_name = tag_name_token.value
+
         context = nodes.ContextReference()
 
-        if tag_name.value == 'fact':
+        if tag_name in ('fact', 'xfact'):
 
             # now we parse a single expression
             fact_name = parser.parse_primary()
@@ -120,9 +122,9 @@ class StoryChecksExtension(Extension):
             # so we assume we're in a macro import, so we DO NOT execute the Fact Tag!
             # return nodes.Output([])  # no output
 
-            call = self.call_method('_fact_processing', [fact_name, as_what, context], [], lineno=lineno)
+            call = self.call_method('_fact_processing' if tag_name == "fact" else "_fact_processing_no_output", [fact_name, as_what, context], [], lineno=lineno)
 
-        elif tag_name.value == 'symbol':
+        elif tag_name in ('symbol', 'xsymbol'):
 
             symbol_value = parser.parse_primary()
 
@@ -137,7 +139,7 @@ class StoryChecksExtension(Extension):
 
         else:
 
-            assert tag_name.value == 'item'
+            assert tag_name in ('item', 'xitem'), tag_name
 
             item_name = parser.parse_primary()
 
@@ -150,7 +152,7 @@ class StoryChecksExtension(Extension):
 
         return nodes.Output([call], lineno=lineno)  # or nodes.CallBlock
 
-    def _fact_processing(self, fact_name, as_what, context):
+    def _fact_processing(self, fact_name, as_what, context, no_output=False):
 
         fact_name = self._normalize_title_string(fact_name)
 
@@ -174,21 +176,31 @@ class StoryChecksExtension(Extension):
             raise RuntimeError("Abnormal fact status: %r for %r (authorized: %s)" % (as_what, fact_name, AUTHORIZED_FACT_RECIPIENTS))
 
         marker = MARKER_FORMAT % dict(fact_name=fact_name, as_what=as_what,
-                                      player_id=player_id, is_cheat_sheet=int(is_cheat_sheet))
+                                      player_id=player_id, is_cheat_sheet=int(is_cheat_sheet),
+                                      no_output=int(no_output))
         return marker  # special marker for final extraction
 
-    def _symbol_processing(self, symbol_name, symbol_value, context):
+    def _fact_processing_no_output(self, fact_name, as_what, context):
+        return self._fact_processing(fact_name, as_what, context, no_output=True)
+
+    def _symbol_processing(self, symbol_name, symbol_value, context, no_output=False):
         assert symbol_name, (symbol_name, symbol_value)
         symbol_name = self._normalize_title_string(symbol_name)
         symbols_list = self.symbols_registry.setdefault(symbol_name, set())
         symbols_list.add(symbol_value)
-        return symbol_value  # output the symbol itself
+        return "" if no_output else symbol_value  # output the symbol itself if needed
 
-    def _item_processing(self, item_name, item_status, context):
+    def _symbol_processing_no_output(self, symbol_name, symbol_value, context):
+        return self._symbol_processing(symbol_name, symbol_value, context, no_output=True)
+
+    def _item_processing(self, item_name, item_status, context, no_output=False):
         item_name = self._normalize_title_string(item_name)
         item_statuses = self.items_registry.setdefault(item_name, set())
         item_statuses.add(item_status)
-        return ""  # empty output
+        return "" if no_output else item_name  # output the item itself if needed
+
+    def _item_processing_no_output(self, symbol_name, symbol_value, context):
+        return self._item_processing(symbol_name, symbol_value, context, no_output=True)
 
 
 def extract_facts_from_intermediate_markup(source, facts_registry):
@@ -202,6 +214,7 @@ def extract_facts_from_intermediate_markup(source, facts_registry):
         as_what = matchobj.group("as_what")
         player_id = matchobj.group("player_id")
         is_cheat_sheet = int(matchobj.group("is_cheat_sheet"))
+        no_output = int(matchobj.group("no_output"))
         assert as_what in AUTHORIZED_FACT_RECIPIENTS, as_what
         is_author = (as_what == "author")
 
@@ -214,7 +227,7 @@ def extract_facts_from_intermediate_markup(source, facts_registry):
         fact_player_params['in_cheat_sheet'] = fact_player_params.get('in_cheat_sheet') or is_cheat_sheet
         fact_player_params['in_normal_sheet'] = fact_player_params.get('in_normal_sheet') or not is_cheat_sheet
 
-        return ""  # REMOVE OUTPUT
+        return "" if no_output else fact_name  # output the fact itself if needed
 
     cleaned_source = re.sub(MARKER_REGEX, _process_fact, source, flags=0)
     return cleaned_source

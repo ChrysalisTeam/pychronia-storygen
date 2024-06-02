@@ -278,7 +278,7 @@ def cli(project_dir, verbose, selected_asset_types):
     )
     storygen_settings = storygen_settings.derive(project_data_tree,
                                                  project_dir=project_dir.replace("\\", "/"))
-    print(">>>>>>>>>>>", storygen_settings.dynamic_settings)
+    ####print(">>>>>>>>>>>", storygen_settings.dynamic_settings)
 
     if _is_asset_type_enabled("sheets"):
         # GENERATE FULL SHEETS AND CHEAT SHEETS
