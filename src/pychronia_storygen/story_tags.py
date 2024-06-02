@@ -18,7 +18,7 @@ from markupsafe import Markup
 
 # Markers inserted into RST chunks, to be recognized later when generating full sheets
 MARKER_FORMAT = r'{#>%(fact_name)s||%(as_what)s||%(player_id)s||%(is_cheat_sheet)s||%(no_output)s<#}'
-MARKER_REGEX = r'\{#>(?P<fact_name>.+)\|\|(?P<as_what>.*)\|\|(?P<player_id>.*)\|\|(?P<is_cheat_sheet>.+)\|\|(?P<no_output>.+)<#\}'
+MARKER_REGEX = r'\{#>(?P<fact_name>.+?)\|\|(?P<as_what>.*?)\|\|(?P<player_id>.*?)\|\|(?P<is_cheat_sheet>.+?)\|\|(?P<no_output>.+?)<#\}'
 
 IS_CHEAT_SHEET_VARNAME = "is_cheat_sheet"
 CURRENT_PLAYER_VARNAME = "current_player_id"
@@ -46,6 +46,9 @@ class StoryChecksExtension(Extension):
     Last but not least, a tag {% item "letter_from_x" is [needed/provided] %} exposes values in
     jinja_env.hints_registry, to check that hints required to solve enigmas are well listed in
     gamemaster checklists.
+
+    These tags output the value they receive as first parameter. If no output is wanted, one must use
+    the alternative tags *xfact, xsymbol or xitem*.
     """
     # a set of names that trigger the extension.
     tags = set(['fact','xfact', 'symbol', 'xsymbol', 'item', 'xitem'])
