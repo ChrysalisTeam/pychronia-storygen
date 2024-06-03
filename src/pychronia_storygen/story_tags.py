@@ -54,9 +54,10 @@ class StoryChecksExtension(Extension):
     tags = set(['fact','xfact', 'symbol', 'xsymbol', 'item', 'xitem'])
 
     @staticmethod
-    def _normalize_title_string(title):
+    def _normalize_title_string(title, normalize_case=True):
         """Important, else the fact-extractor REGEX will not work for example"""
-        return title.replace("\r\n", "").replace("\n", "").strip()
+        res = title.replace("\r\n", "").replace("\n", "").strip()
+        return res.lower() if normalize_case else res
 
     def __init__(self, environment):
         super(StoryChecksExtension, self).__init__(environment)
@@ -138,7 +139,7 @@ class StoryChecksExtension(Extension):
 
             symbol_name = parser.parse_primary()
 
-            call = self.call_method('_symbol_processing', [symbol_name, symbol_value, context], [], lineno=lineno)
+            call = self.call_method('_symbol_processing' if tag_name == "symbol" else "_symbol_processing_no_output", [symbol_name, symbol_value, context], [], lineno=lineno)
 
         else:
 
@@ -151,13 +152,13 @@ class StoryChecksExtension(Extension):
             item_status_value = parser.stream.expect(lexer.TOKEN_NAME).value  # eg. "needed" or "provided"
             item_status = nodes.Const(item_status_value)
 
-            call = self.call_method('_item_processing', [item_name, item_status, context], [], lineno=lineno)
+            call = self.call_method('_item_processing' if tag_name == "item" else "_item_processing_no_output", [item_name, item_status, context], [], lineno=lineno)
 
         return nodes.Output([call], lineno=lineno)  # or nodes.CallBlock
 
     def _fact_processing(self, fact_name, as_what, context, no_output=False):
 
-        fact_name = self._normalize_title_string(fact_name)
+        fact_name = self._normalize_title_string(fact_name, normalize_case=False)
 
         player_id = context.get(CURRENT_PLAYER_VARNAME, DUMMY_GAMEMASTER_NAME)  # FIXME CHANGE THIS NAME
         is_cheat_sheet = context.get(IS_CHEAT_SHEET_VARNAME, False)
@@ -197,8 +198,8 @@ class StoryChecksExtension(Extension):
         return self._symbol_processing(symbol_name, symbol_value, context, no_output=True)
 
     def _item_processing(self, item_name, item_status, context, no_output=False):
-        item_name = self._normalize_title_string(item_name)
-        item_statuses = self.items_registry.setdefault(item_name, set())
+        item_name = self._normalize_title_string(item_name, normalize_case=False)
+        item_statuses = self.items_registry.setdefault(item_name.lower(), set())  # BEWARE we normalize case here!
         item_statuses.add(item_status)
         return "" if no_output else item_name  # output the item itself if needed
 
@@ -221,7 +222,7 @@ def extract_facts_from_intermediate_markup(source, facts_registry):
         assert as_what in AUTHORIZED_FACT_RECIPIENTS, as_what
         is_author = (as_what == "author")
 
-        fact_params = facts_registry.setdefault(fact_name, {})
+        fact_params = facts_registry.setdefault(fact_name.lower(), {})  # BEWARE we normalize case here!
         fact_player_params = fact_params.setdefault(player_id, {})
 
         fact_player_params['is_author'] = fact_player_params.get('is_author') or is_author
