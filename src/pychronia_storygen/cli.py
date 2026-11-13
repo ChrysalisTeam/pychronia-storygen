@@ -3,6 +3,7 @@
 import dataclasses
 import logging
 import os
+import re
 from collections import ChainMap
 from pathlib import Path
 from pprint import pprint
@@ -38,6 +39,7 @@ class StorygenSettings:
     jinja_env: object
     dynamic_variables: ChainMap
     dynamic_settings: ChainMap
+    language: str = None  # Language of the generated documents (eg. "fr"), if the project is translated
 
     def derive(self, new_config_level, **extra_dynamic_variables):
         """Return a new StorygenSettings with nested variables/storygen_settings loaded from new_config_level fields"""
@@ -240,7 +242,11 @@ def _handle_analysis_results(has_serious_errors, error_messages):
 @click.option('--verbose', '-v', is_flag=True, help="Print more output.")
 @click.option("-t", "--type", "selected_asset_types", type=click.Choice(['sheets', 'documents', 'inventories'], case_sensitive=False),
                             multiple=True, help="Select the types of assets to generate")
-def cli(project_dir, verbose, selected_asset_types):
+@click.option("-l", "--lang", "language", default=None,
+              help="Language code (eg. 'fr') of a translated project: its 'configuration_<lang>.yaml' file is used "
+                   "if it exists (else 'configuration.yaml'), only the macros of language-neutral or '_<lang>' "
+                   "templates are loaded, and files are generated in '_build/<lang>/' and '_output/<lang>/'.")
+def cli(project_dir, verbose, selected_asset_types, language):
     ##print("HELLO STARTING", selected_asset_types)
     project_dir = os.path.abspath(project_dir).rstrip("\\/") + os.path.sep
 
@@ -255,16 +261,26 @@ def cli(project_dir, verbose, selected_asset_types):
     logging.debug("Switching to current working directory: %s", project_dir)
     os.chdir(project_dir)
 
-    output_root_dir = Path("./_output") # FIXME
-    os.makedirs(output_root_dir, exist_ok=True)
+    if language and not re.fullmatch(r"[a-z]{2}", language):
+        raise click.BadParameter("Language must be a 2-letter lowercase code, eg. 'fr'", param_hint="--lang")
 
+    output_root_dir = Path("./_output") # FIXME
     build_root_dir = Path("./_build") # FIXME
+    excluded_template_dirs = (output_root_dir, build_root_dir)  # They contain generated files, not templates
+    if language:
+        output_root_dir = output_root_dir.joinpath(language)
+        build_root_dir = build_root_dir.joinpath(language)
+    os.makedirs(output_root_dir, exist_ok=True)
     os.makedirs(build_root_dir, exist_ok=True)
 
     yaml_conf_file = "./configuration.yaml"   # FIXME
+    if language and os.path.exists("./configuration_%s.yaml" % language):
+        yaml_conf_file = "./configuration_%s.yaml" % language
+    logging.info("Loading project configuration file '%s'", yaml_conf_file)
 
     # FIXME here add TEMPLATES_COMMON too
-    jinja_env = load_jinja_environment(["."], use_macro_tags=True)
+    jinja_env = load_jinja_environment(["."], use_macro_tags=True, language=language,
+                                       excluded_dirs=excluded_template_dirs)
 
     project_data_tree = load_yaml_file(yaml_conf_file)
 
@@ -275,9 +291,11 @@ def cli(project_dir, verbose, selected_asset_types):
         jinja_env=jinja_env,
         dynamic_variables=ChainMap(),
         dynamic_settings=ChainMap(),
+        language=language,
     )
     storygen_settings = storygen_settings.derive(project_data_tree,
-                                                 project_dir=project_dir.replace("\\", "/"))
+                                                 project_dir=project_dir.replace("\\", "/"),
+                                                 language=language)
     ####print(">>>>>>>>>>>", storygen_settings.dynamic_settings)
 
     if _is_asset_type_enabled("sheets"):
