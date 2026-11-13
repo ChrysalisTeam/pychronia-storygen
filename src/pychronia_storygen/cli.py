@@ -17,7 +17,8 @@ from types import MappingProxyType
 
 from pychronia_storygen.document_formats import load_yaml_file, load_jinja_environment, load_rst_file, \
     render_with_jinja_and_fact_tags, convert_rst_content_to_pdf, render_with_jinja, generate_rst_and_pdf_files, \
-    render_with_jinja_and_convert_to_pdf, extract_text_from_odt_file, split_odt_file_into_separate_documents
+    render_with_jinja_and_convert_to_pdf, extract_text_from_odt_file, split_odt_file_into_separate_documents, \
+    get_filename_language
 from pychronia_storygen.inventory import analyze_and_normalize_game_items
 from pychronia_storygen.story_tags import CURRENT_PLAYER_VARNAME, IS_CHEAT_SHEET_VARNAME, detect_game_item_errors, \
     detect_game_symbol_errors, detect_game_fact_errors
@@ -171,6 +172,8 @@ def _generate_document_files(document_bundle_name, document_config, storygen_set
 
     # We then split the PDF into parts
     output_relative_dir, ext = os.path.splitext(document_source)  # The basename becomes the name of the target FOLDER
+    if get_filename_language(document_source):
+        output_relative_dir = output_relative_dir[:-3]  # "game_clues_fr.odt" -> folder "game_clues" (already under _output/<lang>)
     output_dir = storygen_settings.output_root_dir.joinpath(output_relative_dir)
     document_splitting = document_config["document_splitting"]
     split_odt_file_into_separate_documents(
