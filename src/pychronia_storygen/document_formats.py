@@ -242,11 +242,126 @@ def _find_soffice():
     raise RuntimeError("LibreOffice (soffice executable) is required to split ODT documents, but was not found")
 
 
-def _export_odt_pages_to_pdf(soffice, input_filename, output_filename, page_range):
-    """
-    Export some pages of an ODT document to PDF with LibreOffice, WITHOUT its comments (gamemaster annotations).
+_NO_SNIPPET_CHECK = object()  # Marker: the first page of a document is not checked at all
 
-    Only the selected pages are exported, so their PDF doesn't embed the images of other pages.
+
+def normalize_document_splitting(splits_config, language=None):
+    """
+    Validate the "document_splitting" entries, and return a list of (name_or_None, page_count, snippet) tuples.
+
+    Entries are "[name|null, page_count]" (first page not checked) or "[name|null, page_count, snippet]", where
+    snippet is null (the first page must have no text, eg. a picture), a string (text expected on the first page),
+    or a per-language mapping of those (a language missing from the mapping means that no check is done).
+    """
+    parts = []
+    for entry in splits_config or []:
+        if not isinstance(entry, (list, tuple)) or len(entry) not in (2, 3):
+            raise StorygenConfigError("Invalid 'document_splitting' entry %r, expected [name|null, page_count] "
+                                      "or [name|null, page_count, snippet]" % (entry,))
+        name, page_count = entry[0], entry[1]
+        if name is not None and not isinstance(name, str):
+            raise StorygenConfigError("Invalid document name in 'document_splitting' entry %r" % (entry,))
+        if isinstance(page_count, bool) or not isinstance(page_count, int) or page_count < 1:
+            raise StorygenConfigError("Invalid page count in 'document_splitting' entry %r" % (entry,))
+        snippet = _NO_SNIPPET_CHECK
+        if len(entry) == 3:
+            snippet = entry[2]
+            if isinstance(snippet, dict):
+                snippet = snippet.get(language, _NO_SNIPPET_CHECK) if language else _NO_SNIPPET_CHECK
+            if snippet is not _NO_SNIPPET_CHECK and snippet is not None and not isinstance(snippet, str):
+                raise StorygenConfigError("Invalid snippet in 'document_splitting' entry %r" % (entry,))
+        parts.append((name, page_count, snippet))
+    return parts
+
+
+def resolve_comment_sample(comment_sample, language=None):
+    """Return the text which gamemaster comments must contain (string, or per-language mapping), or None if no check."""
+    if isinstance(comment_sample, dict):
+        comment_sample = comment_sample.get(language) if language else None
+    if comment_sample is not None and not isinstance(comment_sample, str):
+        raise StorygenConfigError("Invalid 'comment_sample' %r, expected a string or a per-language mapping" % (comment_sample,))
+    return comment_sample or None
+
+
+def check_comment_sample(document_text, comment_sample, document_source):
+    """Ensure that the text extracted from an ODT file includes its gamemaster comments, which contain story tags."""
+    if comment_sample and comment_sample not in document_text:
+        raise RuntimeError("Comments of %s were not extracted (missing %r)" % (document_source, comment_sample))
+
+
+def _normalize_pdf_text(text):
+    return "".join(text.split()).lower()  # PDF text extraction is unreliable regarding spaces and line breaks
+
+
+def _check_first_pages(reader, parts, input_doc):
+    """
+    Ensure that each document starts on the expected page, by searching the text snippet declared for its first page
+    (None meaning that this page has no text, eg. a picture), since page counts may change when editing the ODT file.
+    """
+    errors = []
+    current_page = 0
+    for basename, page_count, snippet in parts:
+        if snippet is not _NO_SNIPPET_CHECK:
+            page_text = _normalize_pdf_text(reader.pages[current_page].extract_text() or "")
+            if (snippet is None and page_text) or (snippet is not None and _normalize_pdf_text(snippet) not in page_text):
+                errors.append("Page %s should start document %s with %r, but contains %r" % (
+                    current_page + 1, basename, snippet, page_text[:60]))
+        current_page += page_count
+    if errors:
+        raise RuntimeError("Document parts don't match the pages of %s, fix 'document_splitting' or the document:\n%s"
+                           % (input_doc, "\n".join(errors)))
+
+
+def _get_resource_names_used(content_owner, reader):
+    """
+    Return the names of resources (fonts, images...) used by the content stream of a page or form XObject,
+    including those used by its form XObjects which have no resources of their own.
+    """
+    from pypdf.generic import ContentStream, NameObject
+
+    contents = content_owner.get_contents() if hasattr(content_owner, "get_contents") else content_owner
+    if contents is None:
+        return set()
+    names = set()
+    for operands, operator in ContentStream(contents, reader).operations:
+        if operator == b"INLINE IMAGE":
+            operands = list(operands["settings"].values())
+        names.update(operand for operand in operands if isinstance(operand, NameObject))
+    resources = content_owner.get("/Resources")
+    xobjects = resources.get_object().get("/XObject", {}) if resources is not None else {}
+    for name in names & set(xobjects.keys()):
+        xobject = xobjects[name].get_object()
+        if xobject.get("/Subtype") == "/Form" and "/Resources" not in xobject:
+            names |= _get_resource_names_used(xobject, reader)  # such forms use the resources of their parent
+    return names
+
+
+def _prune_page_resources(page, reader):
+    """
+    Remove, from the resources of a page, those not used by its content stream.
+
+    Office suites share the same resources (images, fonts...) between all pages, so without this,
+    each split PDF would embed all the images of the document, ie. spoil the other documents.
+    """
+    from pypdf.generic import DictionaryObject, NameObject
+
+    resources = page.get("/Resources")
+    if resources is None:
+        return
+    used_names = _get_resource_names_used(page, reader)
+    pruned_resources = DictionaryObject()
+    for category, entries in resources.get_object().items():
+        entries = entries.get_object()
+        if isinstance(entries, DictionaryObject):
+            entries = DictionaryObject((name, value) for (name, value) in entries.items() if name in used_names)
+        pruned_resources[NameObject(category)] = entries
+    page[NameObject("/Resources")] = pruned_resources  # a copy, since the original is shared by all pages
+
+
+def _export_odt_to_pdf(soffice, input_filename, output_filename):
+    """
+    Export a whole ODT document to PDF with LibreOffice, WITHOUT its comments (gamemaster annotations).
+
     A private LibreOffice profile is used, so that the job is not handed over to an already running LibreOffice.
     """
     with tempfile.TemporaryDirectory(prefix="storygen_libreoffice_") as tmp_dir:
@@ -255,12 +370,11 @@ def _export_odt_pages_to_pdf(soffice, input_filename, output_filename, page_rang
         os.makedirs(profile_dir)
         os.makedirs(out_dir)
         # JSON filter options need LibreOffice >= 7.4
-        export_filter = ('pdf:writer_pdf_Export:{"PageRange":{"type":"string","value":"%s"},'
-                         '"ExportNotes":{"type":"boolean","value":"false"},'
-                         '"ExportNotesInMargin":{"type":"boolean","value":"false"}}' % page_range)
+        export_filter = ('pdf:writer_pdf_Export:{"ExportNotes":{"type":"boolean","value":"false"},'
+                         '"ExportNotesInMargin":{"type":"boolean","value":"false"}}')
         cmd = [soffice, "-env:UserInstallation=%s" % Path(profile_dir).as_uri(), "--headless", "--norestore",
                "--nologo", "--convert-to", export_filter, "--outdir", out_dir, input_filename]
-        logging.debug("Exporting pages %s of ODT file with command: %s", page_range, cmd)
+        logging.debug("Exporting ODT file with command: %s", cmd)
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL)
         exported_pdf = os.path.join(out_dir, os.path.splitext(os.path.basename(input_filename))[0] + ".pdf")
         if not os.path.exists(exported_pdf):
@@ -268,27 +382,53 @@ def _export_odt_pages_to_pdf(soffice, input_filename, output_filename, page_rang
         shutil.move(exported_pdf, output_filename)
 
 
-def split_odt_file_into_separate_documents(input_filename, splits_config, output_dir):
+FULL_PDF_NAME = "_all_documents.pdf"  # Temporary file of the output dir
+
+
+def split_odt_file_into_separate_documents(input_filename, splits_config, output_dir, language=None):
+    """
+    Export the whole ODT document to PDF once, then split it into one PDF per document, as declared by splits_config
+    (see normalize_document_splitting()). Pages of entries without name are skipped.
+
+    Documents PDFs of output_dir are removed first, so that none remains after a failed export.
+
+    IMPORTANT - GAMEMASTER COMMENTS of the document must not be exported.
+    """
+    from pypdf import PdfReader, PdfWriter
+
     input_filename = os.path.abspath(os.path.normpath(input_filename))
     output_dir = os.path.abspath(os.path.normpath(output_dir))
+    parts = normalize_document_splitting(splits_config, language=language)
     os.makedirs(output_dir, exist_ok=True)
 
-    soffice = _find_soffice()
+    full_pdf = os.path.join(output_dir, FULL_PDF_NAME)
+    for filepath in [full_pdf] + [os.path.join(output_dir, basename + ".pdf") for (basename, _count, _snippet) in parts if basename]:
+        if os.path.exists(filepath):
+            os.remove(filepath)
 
-    current_page = 1
-    for idx, (basename, page_count) in enumerate(splits_config):
-        prefix = ""  # or ("%02d_" % idx) if debugging needed
-        output_filename = os.path.join(output_dir, prefix + basename + ".pdf")
-        page_range = '%s-%s' % (current_page, current_page + page_count - 1)
-        _export_odt_pages_to_pdf(soffice, input_filename, output_filename, page_range=page_range)
+    try:
+        _export_odt_to_pdf(_find_soffice(), input_filename, full_pdf)
+        reader = PdfReader(full_pdf)
+        if any(annot.get_object()["/Subtype"] == "/Text" for page in reader.pages for annot in page.get("/Annots", [])):
+            raise RuntimeError("Gamemaster comments were exported to %s" % full_pdf)
+        declared_page_count = sum(page_count for (_basename, page_count, _snippet) in parts)
+        if declared_page_count != len(reader.pages):  # else parts would be shifted
+            raise RuntimeError("Document parts declare %s pages, but %s has %s pages"
+                               % (declared_page_count, input_filename, len(reader.pages)))
+        _check_first_pages(reader, parts, input_doc=input_filename)
 
-        # IMPORTANT - GAMEMASTER ANNOTATIONS must never be visible in game documents
-        with open(output_filename, 'rb') as f:
-            data = f.read()
-        if re.search(br'/Subtype\s*/Text\b', data):
-            raise RuntimeError("Gamemaster comments were exported to game document '%s'" % output_filename)
-
-        current_page += page_count
+        current_page = 0
+        for basename, page_count, _snippet in parts:
+            if basename is not None:  # else, pages are skipped
+                writer = PdfWriter()
+                for page in reader.pages[current_page:current_page + page_count]:
+                    _prune_page_resources(page, reader)
+                    writer.add_page(page)
+                writer.write(os.path.join(output_dir, basename + ".pdf"))
+            current_page += page_count
+    finally:
+        if os.path.exists(full_pdf):
+            os.remove(full_pdf)
 
 
 
