@@ -1,5 +1,6 @@
 import copy
 import functools
+import io
 import logging
 from pathlib import Path
 
@@ -298,6 +299,35 @@ def split_odt_file_into_separate_documents(input_filename, splits_config, output
 DOTTED_TOC_EXTENSION = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dotted_toc_compat.py")
 
 
+def unlink_unknown_rst_targets(rst_file):
+    """
+    Turn references to missing targets (eg. sections absent from a truncated manual) into plain text,
+    since recent rst2pdf versions abort on "Unknown target name" errors. The RST file is rewritten in place.
+    """
+    import docutils.core
+
+    with open(rst_file, "r", encoding="utf8") as f:
+        rst_content = f.read()
+
+    warning_stream = io.StringIO()
+    docutils.core.publish_doctree(rst_content, settings_overrides=dict(halt_level=5, report_level=3,
+                                                                       warning_stream=warning_stream))
+    unknown_targets = set(re.findall(r'Unknown target name: "(.+?)"\.', warning_stream.getvalue()))
+    if not unknown_targets:
+        return
+
+    logging.info("Unlinking unknown RST targets in %s: %s", rst_file, sorted(unknown_targets))
+
+    def _unlink(matchobj):
+        name = matchobj.group(1)
+        normalized_name = " ".join(name.split()).lower()  # like docutils.nodes.fully_normalize_name()
+        return name if normalized_name in unknown_targets else matchobj.group(0)
+
+    rst_content = re.sub(r'`([^`<>]+)`_(?!_)', _unlink, rst_content)
+    with open(rst_file, "w", encoding="utf8") as f:
+        f.write(rst_content)
+
+
 RST2PDF_ERROR_MARKERS = ("[ERROR]", "[CRITICAL]", "(ERROR/", "(SEVERE/")
 DEFAULT_SMART_QUOTES = 2  # English rules, kept as default for backward-compatibility
 
@@ -386,6 +416,8 @@ def generate_rst_and_pdf_files(rst_content, relative_path, storygen_settings):
     pdf_file = storygen_settings.output_root_dir.joinpath(relative_path).with_suffix(".pdf")
 
     write_rst_file(rst_file, data=rst_content, language=storygen_settings.language)
+    if storygen_settings.dynamic_settings.get("unlink_unknown_rst_targets", False):
+        unlink_unknown_rst_targets(rst_file)  # On the final RST, after jinja rendering
     convert_rst_file_to_pdf(rst_file, pdf_file,
                             conf_file=expand_lang_placeholder(storygen_settings.dynamic_settings.get("rst2pdf_conf_file", ""),
                                                               storygen_settings.language),
