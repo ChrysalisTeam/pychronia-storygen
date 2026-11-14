@@ -177,7 +177,8 @@ def _generate_inventory_files(inventory_name, inventory_config, storygen_setting
                                              jinja_context=jinja_context,
                                              storygen_settings=storygen_settings)
 
-def _generate_document_files(document_bundle_name, document_config, storygen_settings: StorygenSettings):
+def _generate_document_files(document_bundle_name, document_config, storygen_settings: StorygenSettings,
+                             skip_document_splitting=False):
     logging.info("Processing generation of game document bundle '%s'" % document_bundle_name)
     document_source = expand_lang_placeholder(document_config["document_source"], storygen_settings.language)
     document_text = extract_text_from_odt_file(document_source)
@@ -188,12 +189,16 @@ def _generate_document_files(document_bundle_name, document_config, storygen_set
         jinja_env=storygen_settings.jinja_env,
         jinja_context=dict(document_bundle_name=document_bundle_name))
 
+    if skip_document_splitting:
+        logging.info("Skipping the splitting of document bundle '%s' into PDF files" % document_bundle_name)
+        return
+
     # We then split the PDF into parts
     output_relative_dir, ext = os.path.splitext(document_source)  # The basename becomes the name of the target FOLDER
     if get_filename_language(document_source):
         output_relative_dir = output_relative_dir[:-3]  # "game_clues_fr.odt" -> folder "game_clues" (already under _output/<lang>)
     output_dir = storygen_settings.output_root_dir.joinpath(output_relative_dir)
-    document_splitting = document_config["document_splitting"]
+    document_splitting = document_config.get("document_splitting") or []
     split_odt_file_into_separate_documents(
         document_source,
         splits_config=document_splitting,
@@ -248,7 +253,7 @@ def _generate_summary_files(summary_config, storygen_settings: StorygenSettings)
                                              storygen_settings=storygen_settings)
 
     logging.info("Processing final results of scenario coherence analysis")
-    _handle_analysis_results(
+    return _handle_analysis_results(
             has_serious_errors=any([has_serious_errors1, has_serious_errors2, has_serious_errors3]),
             error_messages=error_messages1 + error_messages2 + error_messages3
     )
@@ -260,6 +265,7 @@ def _handle_analysis_results(has_serious_errors, error_messages):
     for criticity, message in error_messages:
         logger_func = logging.error if criticity == "ERROR" else logging.warning
         logger_func(message)
+    return has_serious_errors
 
 
 @click.command()
@@ -275,7 +281,10 @@ def _handle_analysis_results(has_serious_errors, error_messages):
               help="Directory where generated output files are written, used as-is instead of the default "
                    "'<project_dir>/_output/' (or '<project_dir>/_output/<lang>/' when a language is given); "
                    "intermediate build files then go into its '_build/' subfolder.")
-def cli(project_dir, verbose, selected_asset_types, language, output_dir):
+@click.option("--skip-document-splitting", "skip_document_splitting", is_flag=True,
+              help="Parse ODT game documents for story tags, but don't split them into PDF files "
+                   "(LibreOffice is then not needed).")
+def cli(project_dir, verbose, selected_asset_types, language, output_dir, skip_document_splitting):
     ##print("HELLO STARTING", selected_asset_types)
     project_dir = os.path.abspath(project_dir).rstrip("\\/") + os.path.sep
     if output_dir:
@@ -360,7 +369,9 @@ def cli(project_dir, verbose, selected_asset_types, language, output_dir):
         document_generation_tree = project_data_tree.get("document_generation")
         if document_generation_tree:
             for document_bundle_name, document_config in document_generation_tree.items():
-                _generate_document_files(document_bundle_name, document_config=document_config, storygen_settings=storygen_settings)
+                _generate_document_files(document_bundle_name, document_config=document_config,
+                                         storygen_settings=storygen_settings,
+                                         skip_document_splitting=skip_document_splitting)
 
     if _is_asset_type_enabled("inventories"):
         # GENERATE INVENTORIES
@@ -374,7 +385,9 @@ def cli(project_dir, verbose, selected_asset_types, language, output_dir):
     if _is_asset_type_enabled("summaries"):
         # GENERATE SUMMARIES
         summary_config = project_data_tree.get("summary_generation") or {}
-        _generate_summary_files(summary_config, storygen_settings=storygen_settings)
+        has_serious_errors = _generate_summary_files(summary_config, storygen_settings=storygen_settings)
+        if has_serious_errors:
+            raise click.exceptions.Exit(1)  # After all files were generated
 
 
 
