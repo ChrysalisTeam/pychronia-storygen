@@ -19,6 +19,7 @@ from pychronia_storygen.document_formats import load_yaml_file, load_jinja_envir
     render_with_jinja_and_fact_tags, convert_rst_content_to_pdf, render_with_jinja, generate_rst_and_pdf_files, \
     render_with_jinja_and_convert_to_pdf, extract_text_from_odt_file, split_odt_file_into_separate_documents, \
     get_filename_language, expand_lang_placeholder, StorygenConfigError
+from pychronia_storygen.data_files import load_data_files
 from pychronia_storygen.inventory import analyze_and_normalize_game_items
 from pychronia_storygen.story_tags import CURRENT_PLAYER_VARNAME, IS_CHEAT_SHEET_VARNAME, detect_game_item_errors, \
     detect_game_symbol_errors, detect_game_fact_errors
@@ -315,12 +316,15 @@ def cli(project_dir, verbose, selected_asset_types, language, output_dir):
     jinja_env = load_jinja_environment(["."] + template_dirs, use_macro_tags=True, language=language,
                                        excluded_dirs=excluded_template_dirs)
 
+    # Root variables loaded from data files are below the "variables" of the configuration, which take precedence
+    data_variables = load_data_files(project_data_tree.get("data_files"), language=language)
+
     storygen_settings = StorygenSettings(
         project_root_dir=project_dir,
         build_root_dir=build_root_dir,
         output_root_dir=output_root_dir,
         jinja_env=jinja_env,
-        dynamic_variables=ChainMap(),
+        dynamic_variables=ChainMap(data_variables),
         dynamic_settings=ChainMap(),
         language=language,
     )
