@@ -43,11 +43,21 @@ class StorygenSettings:
     dynamic_settings: ChainMap
     language: str = None  # Language of the generated documents (eg. "fr"), if the project is translated
 
-    def derive(self, new_config_level, **extra_dynamic_variables):
-        """Return a new StorygenSettings with nested variables/storygen_settings loaded from new_config_level fields"""
-        _new_variables = new_config_level.get("variables", {})
+    def derive(self, new_config_level, default_variables=None, **extra_dynamic_variables):
+        """
+        Return a new StorygenSettings with nested variables/storygen_settings loaded from new_config_level fields
+
+        extra_dynamic_variables are forced values, which override any other variable.
+        default_variables only apply if the variable is not defined at the current level or in any ancestor level
+        (even as None), eg. the sheet name is only the default "current_player_id" of a sheet.
+        """
+        _new_variables = new_config_level.get("variables") or {}
         dynamic_variables = self.dynamic_variables.new_child(_new_variables, **extra_dynamic_variables)
-        _new_settings = new_config_level.get("settings", {})
+        _missing_defaults = {key: value for key, value in (default_variables or {}).items()
+                             if key not in dynamic_variables}
+        if _missing_defaults:
+            dynamic_variables = ChainMap(*dynamic_variables.maps, _missing_defaults)  # Lowest priority
+        _new_settings = new_config_level.get("settings") or {}
         dynamic_settings = self.dynamic_settings.new_child(_new_settings)
         return dataclasses.replace(self, dynamic_variables=dynamic_variables, dynamic_settings=dynamic_settings)
 
@@ -70,7 +80,7 @@ def _recursively_generate_group_sheets(data_tree: dict, group_breadcrumb: tuple,
         #_player_variables = frozenmap(sheet_config.get("variables", {}))
         player_storygen_settings = group_storygen_settings.derive(
             sheet_config,
-            **{CURRENT_PLAYER_VARNAME: sheet_name}
+            default_variables={CURRENT_PLAYER_VARNAME: sheet_name}  # Overridable, even by None, at group/sheet level
         )
         #player_cumulated_variables = frozenmap(group_cumulated_variables,
         #                                       )  # FIXME??
