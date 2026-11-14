@@ -16,6 +16,9 @@ rst2pdf = "^0.101"
 docutils = ">=0.20.1,<0.22"  # rst2pdf 0.101 imports docutils.utils.roman, removed in docutils 0.22
 reportlab = "^4.1.0"
 
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+
 [tool.poetry.scripts]
 pychronia_storygen = "pychronia_storygen.cli:cli"
 
