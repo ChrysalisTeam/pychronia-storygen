@@ -64,9 +64,17 @@ def expand_lang_placeholder(path, language):
 ###################################
 
 
+class _StorygenYamlLoader(yaml.SafeLoader):
+    """Safe YAML loader which also accepts the "!!python/tuple" tag, eg. of data dumps made by Python programs."""
+
+
+_StorygenYamlLoader.add_constructor("tag:yaml.org,2002:python/tuple",
+                                    lambda loader, node: tuple(loader.construct_sequence(node)))
+
+
 def load_yaml_file(yaml_file):
     with open(yaml_file, "r", encoding="utf8") as f:
-        data = yaml.load(f, Loader=yaml.SafeLoader)
+        data = yaml.load(f, Loader=_StorygenYamlLoader)
         return data
 
 
