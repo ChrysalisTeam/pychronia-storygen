@@ -106,7 +106,8 @@ def _convert_special_markups_and_punctuations(text, language=None):
         text = (text.replace(" !", u"\u00A0!")
                     .replace(" ?", u"\u00A0?")
                     .replace(" ;", u"\u00A0;")
-                    .replace(" :\n", u"\u00A0:\n"))  # beware about RST directives here...
+                    .replace(" :\n", u"\u00A0:\n")  # beware about RST directives here...
+                    .replace(" : ", u"\u00A0: "))
     return text
 
 
@@ -114,7 +115,7 @@ def write_rst_file(rst_file, data, language=None):
     """
     Creates missing folders along the way.
 
-    Also converts [BR] and [PAGEBREAK] to pdf spacings, and fixes punctuation spaces of French texts, on the fly.
+    Also converts [BR] and [PAGEBREAK] to pdf spacings, fixes punctuation spaces of French texts, and strips BOMs, on the fly.
     """
 
     if isinstance(data, (tuple, list)):
@@ -123,6 +124,8 @@ def write_rst_file(rst_file, data, language=None):
         assert isinstance(data, str), type(data)
         full_rst = data
 
+    # BOMs of template files (each part may start with one) break RST headings and inline markup
+    full_rst = full_rst.replace("\ufeff", "")
     full_rst = _convert_special_markups_and_punctuations(full_rst, language=language)
 
     _create_missing_parent_folders(rst_file)
