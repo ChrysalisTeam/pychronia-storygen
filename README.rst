@@ -31,3 +31,88 @@ generated RST files then go into its "_build/" subfolder::
     pychronia_storygen my_project --lang en --output-dir ../dist/my_project_en
 
 From a checkout without installing the package, "python main.py" works as well, provided the dependencies are installed.
+
+Configuration reference
+=======================
+
+All top-level sections of "configuration.yaml" are optional ("sheet_generation", "document_generation",
+"inventory_generation", "summary_generation"), as are the "sheets" of a group, all keys of an inventory,
+and each of the three summary templates (facts, symbols, items, each with its destination).
+The coherence analysis runs at the end even if no summary template is configured.
+
+Paths with ``{lang}``
+---------------------
+
+Every path-valued entry (sheet parts, "document_source", "inventory_*" and "game_*" templates/destinations/data,
+"template_dirs", "data_files", the "rst2pdf_conf_file" and "docutils_conf_file" settings) may contain the ``{lang}``
+placeholder, replaced by the ``--lang`` code, so that one configuration serves all languages.
+Using it without ``--lang`` is an error. In YAML, quote values with braces inside flow lists: ``["intro_{lang}.rst"]``.
+
+Extra template directories
+--------------------------
+
+::
+
+    "template_dirs": ["../common/templates"]
+
+Directories relative to the project folder, searched for templates AFTER the project folder (which has priority),
+and also scanned for jinja2 macros (with the same language filtering). The "_build"/"_output" exclusions
+only concern the project folder.
+
+Data files
+----------
+
+::
+
+    "data_files":
+      - file: game_data_{lang}.yaml              # a mapping, merged at the root of the variables
+      - variable: manual                         # or stored under this variable name
+        file: manual_{lang}.yaml
+      - file: [local.yaml, local.yaml.example]   # list of candidates: the first existing one is used, else error
+      - file: dump.yaml
+        overlay: dump_{lang}.yaml                # optional partial translation, deep-merged if the file exists
+
+Entries are loaded in order (later ones override earlier ones). Root variables loaded from data files have
+a lower priority than the "variables" of the configuration. Every key of an overlay must exist in the base data.
+
+Python hook
+-----------
+
+::
+
+    "variables_hook": "my_hooks.prepare_variables"
+
+The module is imported with the project folder and the "template_dirs" at the front of "sys.path".
+The function is called once, after data files are loaded and before any generation, as
+``prepare_variables(variables, *, language, jinja_env)``, where "variables" is the dict of root variables
+(data files, then configuration "variables", "project_dir" and "language"). It may mutate it, or return a new dict.
+It can also register jinja2 filters on ``jinja_env``.
+
+current_player_id
+-----------------
+
+The name of a sheet is only the DEFAULT value of its "current_player_id" variable. A "variables" entry
+"current_player_id" at group level applies to the sheets of the group (and subgroups) unless a sheet defines its own;
+an explicit ``null`` disables the registration of story tags for that sheet.
+
+RST to PDF settings
+-------------------
+
+Hierarchical "settings" (project, group, sheet levels):
+
+- "rst2pdf_smart_quotes": value of the rst2pdf ``--smart-quotes`` option (default 2); use 0 to let docutils handle quotes.
+- "docutils_conf_file": docutils configuration file, given to rst2pdf through the ``DOCUTILSCONFIG`` environment variable.
+- "unlink_unknown_rst_targets": if true, references like \`text\`_ to unknown targets are turned into plain text
+  in the final RST file, before the PDF conversion.
+
+rst2pdf errors (missing images, unknown targets...) are detected in its output even when it exits with code 0:
+the generation fails, and no stale PDF is left behind.
+
+Command line
+------------
+
+Storygen exits with a non-zero code if the coherence analysis finds serious errors, after all files were generated.
+With ``--skip-document-splitting``, ODT game documents are still parsed for story tags, but not split into PDFs
+(LibreOffice is then not needed).
+
+Tests are run with "pytest" (a dev dependency).
