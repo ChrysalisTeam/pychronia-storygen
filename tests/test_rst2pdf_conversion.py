@@ -1,4 +1,5 @@
 import pytest
+from pypdf import PdfReader
 
 from pychronia_storygen import document_formats
 from pychronia_storygen.document_formats import convert_rst_file_to_pdf, find_rst2pdf_errors
@@ -46,8 +47,12 @@ def test_real_rst2pdf_conversion_and_missing_image(tmp_path, monkeypatch):
     good = tmp_path / "good.txt"
     good.write_text("Title\n=====\n\nHello \"world\"\n", encoding="utf8")
     pdf = tmp_path / "out" / "good.pdf"
-    convert_rst_file_to_pdf(str(good), str(pdf))
+    conf = tmp_path / "rst2pdf.conf"
+    conf.write_text("[general]\ncompressed=false\n", encoding="utf8")
+    convert_rst_file_to_pdf(str(good), str(pdf), conf_file=str(conf))
     assert pdf.read_bytes().startswith(b"%PDF")
+    contents = PdfReader(str(pdf)).pages[0]["/Contents"].get_object()
+    assert "/FlateDecode" in contents.get("/Filter", [])  # always compressed, despite the conf file
 
     bad = tmp_path / "bad.txt"
     bad.write_text("Title\n=====\n\n.. image:: missing_image.png\n", encoding="utf8")

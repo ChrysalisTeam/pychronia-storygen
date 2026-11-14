@@ -115,6 +115,8 @@ Hierarchical "settings" (project, group, sheet levels):
 - "unlink_unknown_rst_targets": if true, references like \`text\`_ to unknown targets are turned into plain text
   in the final RST file, before the PDF conversion.
 
+PDF files are always generated compressed (rst2pdf ``--compressed`` option, whatever the rst2pdf configuration file says).
+
 rst2pdf errors (missing images, unknown targets...) are detected in its output even when it exits with code 0:
 the generation fails, and no stale PDF is left behind.
 

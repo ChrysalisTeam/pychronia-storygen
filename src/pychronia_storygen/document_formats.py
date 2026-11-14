@@ -524,7 +524,7 @@ def convert_rst_file_to_pdf(rst_file, pdf_file, conf_file="", extra_args="", lan
     command = [sys.executable,  # The python environment of storygen, which has rst2pdf
                "-m", "rst2pdf.createpdf", str(rst_file), "-o", str(pdf_file), "--config=%s" % conf_file,
                "--fit-background-mode=scale", "--first-page-on-right", "--smart-quotes=%s" % smart_quotes,
-               "--break-side=any",
+               "--break-side=any", "--compressed",  # overrides any "compressed=false" of the conf file
                "-e", DOTTED_TOC_EXTENSION, "--fit-literal-mode=shrink"] + extra_args
 
     logging.debug("Executing command: %s" % command)
