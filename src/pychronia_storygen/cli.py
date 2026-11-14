@@ -18,7 +18,7 @@ from types import MappingProxyType
 from pychronia_storygen.document_formats import load_yaml_file, load_jinja_environment, load_rst_file, \
     render_with_jinja_and_fact_tags, convert_rst_content_to_pdf, render_with_jinja, generate_rst_and_pdf_files, \
     render_with_jinja_and_convert_to_pdf, extract_text_from_odt_file, split_odt_file_into_separate_documents, \
-    get_filename_language, expand_lang_placeholder
+    get_filename_language, expand_lang_placeholder, StorygenConfigError
 from pychronia_storygen.inventory import analyze_and_normalize_game_items
 from pychronia_storygen.story_tags import CURRENT_PLAYER_VARNAME, IS_CHEAT_SHEET_VARNAME, detect_game_item_errors, \
     detect_game_symbol_errors, detect_game_fact_errors
@@ -303,11 +303,17 @@ def cli(project_dir, verbose, selected_asset_types, language, output_dir):
         yaml_conf_file = "./configuration_%s.yaml" % language
     logging.info("Loading project configuration file '%s'", yaml_conf_file)
 
-    # FIXME here add TEMPLATES_COMMON too
-    jinja_env = load_jinja_environment(["."], use_macro_tags=True, language=language,
-                                       excluded_dirs=excluded_template_dirs)
-
     project_data_tree = load_yaml_file(yaml_conf_file) or {}
+
+    # Extra template directories are searched AFTER the project dir, and are also scanned for macros
+    template_dirs = [expand_lang_placeholder(template_dir, language)
+                     for template_dir in (project_data_tree.get("template_dirs") or [])]
+    for template_dir in template_dirs:
+        if not os.path.isdir(template_dir):
+            raise StorygenConfigError("Template directory %r of 'template_dirs' does not exist" % template_dir)
+
+    jinja_env = load_jinja_environment(["."] + template_dirs, use_macro_tags=True, language=language,
+                                       excluded_dirs=excluded_template_dirs)
 
     storygen_settings = StorygenSettings(
         project_root_dir=project_dir,

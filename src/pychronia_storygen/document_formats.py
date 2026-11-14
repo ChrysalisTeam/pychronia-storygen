@@ -140,7 +140,9 @@ def load_jinja_environment(templates_root: list, use_macro_tags: bool, language=
     If a language is given, macros are only searched in templates which are language-neutral, or in this language,
     so that translations of a same template don't declare the same macros twice.
 
-    Macros are not searched in excluded_dirs (eg. build and output folders), which are relative to the templates root.
+    templates_root is the list of template directories, by decreasing priority: the first one is the project dir.
+    Macros are not searched in excluded_dirs (eg. build and output folders), which are relative to the FIRST
+    templates directory only.
     """
     # IMPORTANT - we refuse undefined template vars: exceptions get raised instead
     jinja_env = jinja2.Environment(undefined=jinja2.StrictUndefined,
@@ -161,11 +163,19 @@ def load_jinja_environment(templates_root: list, use_macro_tags: bool, language=
         configure_environment(jinja_env)
 
         # We do similarly to jinja_env.macros.register_from_environment(), but for RST files!
-        templates = jinja_env.macros.environment.list_templates(extensions=("rst", "txt"))  # FIXME add .j2/.jinja extensions here!
         excluded_prefixes = tuple(Path(excluded_dir).as_posix().rstrip("/") + "/" for excluded_dir in excluded_dirs)
-        for tpl in templates:
-            if excluded_prefixes and tpl.startswith(excluded_prefixes):  # Jinja2 template names use forward slashes
-                continue
+        extra_dirs = [Path(templates_dir).resolve() for templates_dir in templates_root[1:]]
+        templates = set()
+        for idx, templates_dir in enumerate(templates_root):
+            for tpl in jinja2.FileSystemLoader(templates_dir).list_templates():
+                if tpl.rsplit(".", 1)[-1] not in ("rst", "txt"):  # FIXME add .j2/.jinja extensions here!
+                    continue
+                if idx == 0 and excluded_prefixes and tpl.startswith(excluded_prefixes):  # Jinja2 template names use forward slashes
+                    continue  # Only the project dir (first one) contains generated files
+                if idx == 0 and any(Path(templates_dir, tpl).resolve().is_relative_to(extra_dir) for extra_dir in extra_dirs):
+                    continue  # Extra dir located inside the project dir, its templates are scanned from there instead
+                templates.add(tpl)
+        for tpl in sorted(templates):  # A template name present in several dirs is loaded from the first one
             template_language = get_filename_language(tpl)
             if language and template_language and template_language != language:
                 logging.debug("Skipping template %s, which is not in language '%s'", tpl, language)
