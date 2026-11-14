@@ -17,3 +17,8 @@ and are built one language at a time::
 With ``--lang``, the "configuration_<language>.yaml" file of the project is used if it exists (else "configuration.yaml"),
 jinja2 macros are only loaded from templates which are language-neutral or in this language,
 and files are generated in "_build/<language>/" and "_output/<language>/".
+
+The ``--output-dir`` option forces the directory where output files are generated, used as-is
+instead of the default "_output/" (or "_output/<language>/") subfolder of the project::
+
+    python main.py my_project --lang en --output-dir ../dist/my_project_en

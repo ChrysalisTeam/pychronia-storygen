@@ -249,9 +249,14 @@ def _handle_analysis_results(has_serious_errors, error_messages):
               help="Language code (eg. 'fr') of a translated project: its 'configuration_<lang>.yaml' file is used "
                    "if it exists (else 'configuration.yaml'), only the macros of language-neutral or '_<lang>' "
                    "templates are loaded, and files are generated in '_build/<lang>/' and '_output/<lang>/'.")
-def cli(project_dir, verbose, selected_asset_types, language):
+@click.option("-o", "--output-dir", "output_dir", default=None, type=click.Path(file_okay=False),
+              help="Directory where generated output files are written, used as-is instead of the default "
+                   "'<project_dir>/_output/' (or '<project_dir>/_output/<lang>/' when a language is given).")
+def cli(project_dir, verbose, selected_asset_types, language, output_dir):
     ##print("HELLO STARTING", selected_asset_types)
     project_dir = os.path.abspath(project_dir).rstrip("\\/") + os.path.sep
+    if output_dir:
+        output_dir = os.path.abspath(output_dir)  # Resolved BEFORE we chdir into the project dir
 
     def _is_asset_type_enabled(_type):
         assert _type.lower() == _type, _type
@@ -269,10 +274,14 @@ def cli(project_dir, verbose, selected_asset_types, language):
 
     output_root_dir = Path("./_output") # FIXME
     build_root_dir = Path("./_build") # FIXME
-    excluded_template_dirs = (output_root_dir, build_root_dir)  # They contain generated files, not templates
+    excluded_template_dirs = [output_root_dir, build_root_dir]  # They contain generated files, not templates
     if language:
         output_root_dir = output_root_dir.joinpath(language)
         build_root_dir = build_root_dir.joinpath(language)
+    if output_dir:
+        output_root_dir = Path(output_dir)
+        if output_root_dir.is_relative_to(project_dir):  # Excluded dirs must be relative to the templates root
+            excluded_template_dirs.append(output_root_dir.relative_to(project_dir))
     os.makedirs(output_root_dir, exist_ok=True)
     os.makedirs(build_root_dir, exist_ok=True)
 
