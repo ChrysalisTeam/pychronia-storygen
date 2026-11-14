@@ -251,7 +251,8 @@ def _handle_analysis_results(has_serious_errors, error_messages):
                    "templates are loaded, and files are generated in '_build/<lang>/' and '_output/<lang>/'.")
 @click.option("-o", "--output-dir", "output_dir", default=None, type=click.Path(file_okay=False),
               help="Directory where generated output files are written, used as-is instead of the default "
-                   "'<project_dir>/_output/' (or '<project_dir>/_output/<lang>/' when a language is given).")
+                   "'<project_dir>/_output/' (or '<project_dir>/_output/<lang>/' when a language is given); "
+                   "intermediate build files then go into its '_build/' subfolder.")
 def cli(project_dir, verbose, selected_asset_types, language, output_dir):
     ##print("HELLO STARTING", selected_asset_types)
     project_dir = os.path.abspath(project_dir).rstrip("\\/") + os.path.sep
@@ -280,6 +281,7 @@ def cli(project_dir, verbose, selected_asset_types, language, output_dir):
         build_root_dir = build_root_dir.joinpath(language)
     if output_dir:
         output_root_dir = Path(output_dir)
+        build_root_dir = output_root_dir.joinpath("_build")
         if output_root_dir.is_relative_to(project_dir):  # Excluded dirs must be relative to the templates root
             excluded_template_dirs.append(output_root_dir.relative_to(project_dir))
     os.makedirs(output_root_dir, exist_ok=True)

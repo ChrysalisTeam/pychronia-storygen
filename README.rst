@@ -19,6 +19,7 @@ jinja2 macros are only loaded from templates which are language-neutral or in th
 and files are generated in "_build/<language>/" and "_output/<language>/".
 
 The ``--output-dir`` option forces the directory where output files are generated, used as-is
-instead of the default "_output/" (or "_output/<language>/") subfolder of the project::
+instead of the default "_output/" (or "_output/<language>/") subfolder of the project;
+generated RST files then go into its "_build/" subfolder::
 
     python main.py my_project --lang en --output-dir ../dist/my_project_en
