@@ -98,6 +98,8 @@ an explicit ``null`` disables the registration of story tags for that sheet.
 RST to PDF settings
 -------------------
 
+In French (or without --lang), the space before "!", "?", ";" and before ":" (when followed by a space or a line break) becomes a non-breaking space in the final RST file; byte order marks (BOM) of the templates are removed.
+
 Hierarchical "settings" (project, group, sheet levels):
 
 - "rst2pdf_smart_quotes": value of the rst2pdf ``--smart-quotes`` option (default 2); use 0 to let docutils handle quotes.
@@ -107,6 +109,35 @@ Hierarchical "settings" (project, group, sheet levels):
 
 rst2pdf errors (missing images, unknown targets...) are detected in its output even when it exits with code 0:
 the generation fails, and no stale PDF is left behind.
+
+ODT game documents
+------------------
+
+A "document_generation" bundle exports an ODT file (``document_source``, which may contain "{lang}") to PDF with
+LibreOffice, then splits it into one PDF per document, in a folder named after the ODT file::
+
+    document_generation:
+      game_clues:
+        document_source: "documents/game_clues_{lang}.odt"
+        comment_sample:               # optional, a string or a per-language mapping
+          fr: "{% xfact"
+          en: "{% xfact"
+        document_splitting:
+          - [recipes_of_potions, 2]                       # name, page count
+          - [null, 1]                                     # null name: these pages are skipped
+          - [useless_messages, 1, "Dear diary"]           # name, page count, text of the first page
+          - [oracle_vision, 3, {fr: "Vision", en: "Vision of"}]  # per-language text (see --lang)
+          - [map, 1, null]                                # null text: the first page must have no text
+
+The ODT file is exported once (without its gamemaster comments), then each part is extracted with pypdf, keeping
+only the images and fonts it uses. The generation fails if the exported file has comment annotations, if the declared
+page counts don't add up to the number of pages, or if the first page of a part doesn't contain its text snippet
+(compared ignoring case and whitespace). Entries with only a name and a page count are not checked on their first page,
+and a language missing from a per-language mapping disables the check for that language.
+The PDFs of the parts are removed before each export.
+
+"comment_sample" (optional) is a text which the ODT text, gamemaster comments included, must contain, else the
+generation fails: it proves that the story tags written in comments were extracted.
 
 Command line
 ------------
