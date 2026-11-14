@@ -35,11 +35,18 @@ class StorygenRun:
         return path
 
     def run(self, *args, expect_ok=True):
+        """Run the default ("build") command on the project, with these extra arguments."""
+        return self.run_command(str(self.project_dir), *args, expect_ok=expect_ok)
+
+    def run_command(self, *args, expect_ok=True):
+        """Run the CLI with these arguments; a command name given first is followed by the project dir."""
+        if args and args[0] in cli.commands:
+            args = (args[0], str(self.project_dir)) + args[1:]
         self.pdf_calls.clear()
         old_cwd = os.getcwd()
         old_path = list(sys.path)
         try:
-            result = CliRunner().invoke(cli, [str(self.project_dir)] + list(args))
+            result = CliRunner().invoke(cli, list(args))
         finally:
             os.chdir(old_cwd)
             sys.path[:] = old_path
