@@ -18,7 +18,7 @@ from types import MappingProxyType
 from pychronia_storygen.document_formats import load_yaml_file, load_jinja_environment, load_rst_file, \
     render_with_jinja_and_fact_tags, convert_rst_content_to_pdf, render_with_jinja, generate_rst_and_pdf_files, \
     render_with_jinja_and_convert_to_pdf, extract_text_from_odt_file, split_odt_file_into_separate_documents, \
-    get_filename_language
+    get_filename_language, expand_lang_placeholder
 from pychronia_storygen.inventory import analyze_and_normalize_game_items
 from pychronia_storygen.story_tags import CURRENT_PLAYER_VARNAME, IS_CHEAT_SHEET_VARNAME, detect_game_item_errors, \
     detect_game_symbol_errors, detect_game_fact_errors
@@ -97,6 +97,7 @@ def _recursively_generate_group_sheets(data_tree: dict, group_breadcrumb: tuple,
 
             # Be tolerant if a single string was entered
             sheet_parts = (sheet_parts,) if isinstance(sheet_parts, str) else sheet_parts
+            sheet_parts = [expand_lang_placeholder(part, player_storygen_settings.language) for part in sheet_parts]
 
             full_rst_content = ""
             for sheet_part in sheet_parts:
@@ -132,7 +133,10 @@ def _generate_inventory_files(inventory_name, inventory_config, storygen_setting
 
     storygen_settings = storygen_settings.derive(inventory_config, inventory_name=inventory_name)
 
-    inventory_data_path = inventory_config.get("inventory_data")
+    def _get_path(key):
+        return expand_lang_placeholder(inventory_config.get(key), storygen_settings.language)
+
+    inventory_data_path = _get_path("inventory_data")
     if not inventory_data_path:
         logging.info("No 'inventory_data' for game inventory '%s', skipping it" % inventory_name)
         return
@@ -140,11 +144,11 @@ def _generate_inventory_files(inventory_name, inventory_config, storygen_setting
     game_items_per_section, game_items_per_crate = analyze_and_normalize_game_items(
         inventory_data, important_marker="IMPORTANT")
 
-    inventory_per_section_template_name = inventory_config.get("inventory_per_section_template")
-    inventory_per_section_destination = inventory_config.get("inventory_per_section_destination")
+    inventory_per_section_template_name = _get_path("inventory_per_section_template")
+    inventory_per_section_destination = _get_path("inventory_per_section_destination")
 
-    inventory_per_crate_template_name = inventory_config.get("inventory_per_crate_template")
-    inventory_per_crate_destination = inventory_config.get("inventory_per_crate_destination")
+    inventory_per_crate_template_name = _get_path("inventory_per_crate_template")
+    inventory_per_crate_destination = _get_path("inventory_per_crate_destination")
 
     if inventory_per_section_template_name and inventory_per_section_destination:
         logging.info("Processing per-section sheet for game inventory '%s'" % inventory_name)
@@ -164,7 +168,7 @@ def _generate_inventory_files(inventory_name, inventory_config, storygen_setting
 
 def _generate_document_files(document_bundle_name, document_config, storygen_settings: StorygenSettings):
     logging.info("Processing generation of game document bundle '%s'" % document_bundle_name)
-    document_source = document_config["document_source"]
+    document_source = expand_lang_placeholder(document_config["document_source"], storygen_settings.language)
     document_text = extract_text_from_odt_file(document_source)
 
     # No need for rendered output, we just fill game-tags registries
@@ -180,7 +184,7 @@ def _generate_document_files(document_bundle_name, document_config, storygen_set
     output_dir = storygen_settings.output_root_dir.joinpath(output_relative_dir)
     document_splitting = document_config["document_splitting"]
     split_odt_file_into_separate_documents(
-        document_config["document_source"],
+        document_source,
         splits_config=document_splitting,
         output_dir=output_dir)
 
@@ -190,42 +194,45 @@ def _generate_summary_files(summary_config, storygen_settings: StorygenSettings)
     summary_config = summary_config or {}
     storygen_settings = storygen_settings.derive(summary_config)
 
+    def _get_path(key):
+        return expand_lang_placeholder(summary_config.get(key), storygen_settings.language)
+
     # The coherence analysis is always done, even if the matching summary template is not configured
     jinja_env = storygen_settings.jinja_env
     has_serious_errors1, error_messages1 = detect_game_fact_errors(jinja_env.facts_registry)
     has_serious_errors2, error_messages2 = detect_game_symbol_errors(jinja_env.symbols_registry)
     has_serious_errors3, error_messages3 = detect_game_item_errors(jinja_env.items_registry)
 
-    if summary_config.get("game_facts_template") and summary_config.get("game_facts_destination"):
+    if _get_path("game_facts_template") and _get_path("game_facts_destination"):
         logging.info("Processing special sheet for game facts")
         jinja_context = dict(facts_registry=jinja_env.facts_registry,
                              has_serious_errors=has_serious_errors1,
                              error_messages=error_messages1,
                              **storygen_settings.dynamic_variables)
-        render_with_jinja_and_convert_to_pdf(summary_config["game_facts_template"],
-                                             relative_path=Path(summary_config["game_facts_destination"]),
+        render_with_jinja_and_convert_to_pdf(_get_path("game_facts_template"),
+                                             relative_path=Path(_get_path("game_facts_destination")),
                                              jinja_context=jinja_context,
                                              storygen_settings=storygen_settings)
 
-    if summary_config.get("game_symbols_template") and summary_config.get("game_symbols_destination"):
+    if _get_path("game_symbols_template") and _get_path("game_symbols_destination"):
         logging.info("Processing special sheet for game symbols")
         jinja_context = dict(symbols_registry=jinja_env.symbols_registry,
                              has_serious_errors=has_serious_errors2,
                              error_messages=error_messages2,
                              **storygen_settings.dynamic_variables)
-        render_with_jinja_and_convert_to_pdf(summary_config["game_symbols_template"],
-                                             relative_path=Path(summary_config["game_symbols_destination"]),
+        render_with_jinja_and_convert_to_pdf(_get_path("game_symbols_template"),
+                                             relative_path=Path(_get_path("game_symbols_destination")),
                                              jinja_context=jinja_context,
                                              storygen_settings=storygen_settings)
 
-    if summary_config.get("game_items_template") and summary_config.get("game_items_destination"):
+    if _get_path("game_items_template") and _get_path("game_items_destination"):
         logging.info("Processing special sheet for game items")
         jinja_context = dict(items_registry=jinja_env.items_registry,
                              has_serious_errors=has_serious_errors3,
                              error_messages=error_messages3,
                              **storygen_settings.dynamic_variables)
-        render_with_jinja_and_convert_to_pdf(summary_config["game_items_template"],
-                                             relative_path=Path(summary_config["game_items_destination"]),
+        render_with_jinja_and_convert_to_pdf(_get_path("game_items_template"),
+                                             relative_path=Path(_get_path("game_items_destination")),
                                              jinja_context=jinja_context,
                                              storygen_settings=storygen_settings)
 

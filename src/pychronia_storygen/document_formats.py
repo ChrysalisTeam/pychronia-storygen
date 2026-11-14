@@ -3,6 +3,7 @@ import functools
 import logging
 from pathlib import Path
 
+import click
 import jinja2
 import os
 import re
@@ -33,6 +34,28 @@ def get_filename_language(filename):
     """Return the language code of a translated file, or None if it has no language suffix."""
     match = LANGUAGE_SUFFIX_REGEX.search(str(filename))
     return match.group(1) if match else None
+
+
+LANG_PLACEHOLDER = "{lang}"
+
+
+class StorygenConfigError(click.ClickException):
+    """Invalid project configuration, reported to the user without traceback."""
+
+
+def expand_lang_placeholder(path, language):
+    """
+    Replace the "{lang}" placeholder of a path-valued configuration entry by the language code.
+
+    This is the single place handling that placeholder; using it without a language (--lang) is an error.
+    Falsy values and non-strings are returned as-is.
+    """
+    if not path or not isinstance(path, str) or LANG_PLACEHOLDER not in path:
+        return path
+    if not language:
+        raise StorygenConfigError("Configuration entry %r uses the %s placeholder, but no language was given (use --lang)"
+                                  % (path, LANG_PLACEHOLDER))
+    return path.replace(LANG_PLACEHOLDER, language)
 
 
 ###################################
@@ -319,7 +342,8 @@ def generate_rst_and_pdf_files(rst_content, relative_path, storygen_settings):
 
     write_rst_file(rst_file, data=rst_content, language=storygen_settings.language)
     convert_rst_file_to_pdf(rst_file, pdf_file,
-                            conf_file=storygen_settings.dynamic_settings.get("rst2pdf_conf_file", ""),
+                            conf_file=expand_lang_placeholder(storygen_settings.dynamic_settings.get("rst2pdf_conf_file", ""),
+                                                              storygen_settings.language),
                             extra_args=storygen_settings.dynamic_settings.get("rst2pdf_extra_args", ""),
                             language=storygen_settings.language)
 
