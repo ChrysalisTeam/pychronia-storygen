@@ -298,9 +298,24 @@ def split_odt_file_into_separate_documents(input_filename, splits_config, output
 DOTTED_TOC_EXTENSION = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dotted_toc_compat.py")
 
 
-def convert_rst_file_to_pdf(rst_file, pdf_file, conf_file="", extra_args="", language=None):
+RST2PDF_ERROR_MARKERS = ("[ERROR]", "[CRITICAL]", "(ERROR/", "(SEVERE/")
+DEFAULT_SMART_QUOTES = 2  # English rules, kept as default for backward-compatibility
+
+
+def find_rst2pdf_errors(output_lines):
+    """Return the lines of rst2pdf logs which report an error, since rst2pdf often exits with code 0 despite them."""
+    return [line.rstrip() for line in output_lines if any(marker in line for marker in RST2PDF_ERROR_MARKERS)]
+
+
+def convert_rst_file_to_pdf(rst_file, pdf_file, conf_file="", extra_args="", language=None,
+                            smart_quotes=DEFAULT_SMART_QUOTES, docutils_conf_file=None):
     """
     Use rst2pdf executable to convert rst file to pdf.
+
+    The output of rst2pdf is scanned for errors (eg. missing images), and on any failure the PDF file is removed,
+    so that no stale or broken PDF remains.
+
+    docutils_conf_file is given to rst2pdf (ie. docutils) through the DOCUTILSCONFIG environment variable.
 
     IMPORTANT : you can output default styles with "rst2pdf --print-stylesheet"
     """
@@ -312,22 +327,42 @@ def convert_rst_file_to_pdf(rst_file, pdf_file, conf_file="", extra_args="", lan
     if language:
         extra_args.insert(0, "--language=%s" % language)  # For smart quotes and hyphenation
 
+    env = dict(os.environ, PYTHONUTF8="1")  # else Windows uses an ANSI codepage for piped logs
+    if docutils_conf_file:
+        if not os.path.exists(docutils_conf_file):
+            raise StorygenConfigError("Docutils configuration file %r does not exist" % str(docutils_conf_file))
+        env["DOCUTILSCONFIG"] = os.path.abspath(docutils_conf_file)
+
     _create_missing_parent_folders(pdf_file)
+    if os.path.exists(pdf_file):
+        os.remove(pdf_file)  # so that no PDF of a previous run remains if this one fails
 
     # fit-background-mode=scale doesn't work in config file, at the moment...
     # other options: --very-verbose --show-frame-boundary or just "-v"
     # FIXME replace this by lIBRARY CALL!!
     command = [sys.executable,  # The python environment of storygen, which has rst2pdf
                "-m", "rst2pdf.createpdf", str(rst_file), "-o", str(pdf_file), "--config=%s" % conf_file,
-               "--fit-background-mode=scale", "--first-page-on-right", "--smart-quotes=2", "--break-side=any",
+               "--fit-background-mode=scale", "--first-page-on-right", "--smart-quotes=%s" % smart_quotes,
+               "--break-side=any",
                "-e", DOTTED_TOC_EXTENSION, "--fit-literal-mode=shrink"] + extra_args
 
-    #print("Current directory: %s" % os.getcwd())
-    logging.debug("Executing command: %s" % command)  # FIXME
+    logging.debug("Executing command: %s" % command)
 
-    res = subprocess.run(command).returncode
+    # rst2pdf exits with code 0 even when it logs errors (eg. missing images), so we check its logs too
+    output_lines = []
+    with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                          encoding="utf8", errors="replace", env=env) as process:
+        for line in process.stdout:
+            sys.stderr.write(line)
+            output_lines.append(line)
+    error_lines = find_rst2pdf_errors(output_lines)
 
-    assert res == 0, "Error when calling rst2pdf"
+    if process.returncode or error_lines:
+        if os.path.exists(pdf_file):
+            os.remove(pdf_file)  # rst2pdf writes the PDF despite errors, don't let it pass for a valid one
+        if process.returncode:
+            raise RuntimeError("Error %s when calling rst2pdf on %s" % (process.returncode, rst_file))
+        raise RuntimeError("rst2pdf reported errors on %s:\n%s" % (rst_file, "\n".join(error_lines)))
 
 
 def convert_rst_content_to_pdf(filepath_base: Path, rst_content, conf_file="", extra_args=""):  #FIXME remove this??
@@ -355,7 +390,10 @@ def generate_rst_and_pdf_files(rst_content, relative_path, storygen_settings):
                             conf_file=expand_lang_placeholder(storygen_settings.dynamic_settings.get("rst2pdf_conf_file", ""),
                                                               storygen_settings.language),
                             extra_args=storygen_settings.dynamic_settings.get("rst2pdf_extra_args", ""),
-                            language=storygen_settings.language)
+                            language=storygen_settings.language,
+                            smart_quotes=storygen_settings.dynamic_settings.get("rst2pdf_smart_quotes", DEFAULT_SMART_QUOTES),
+                            docutils_conf_file=expand_lang_placeholder(
+                                storygen_settings.dynamic_settings.get("docutils_conf_file"), storygen_settings.language))
 
 
 
