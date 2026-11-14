@@ -268,7 +268,8 @@ def detect_game_symbol_errors(symbols_registry):
     has_serious_errors = False
     error_messages = []
     for k, v in sorted(symbols_registry.items()):
-        unique_values = set(x.lower() for x in v)  # Case-isnensitive, and we could go further to NORMALIZE
+        # Case-insensitive, and ignoring surrounding whitespace and newlines (frequent in texts extracted from ODT files)
+        unique_values = set(x.strip().lower().replace("\r", "").replace("\n", "") for x in v)
         if len(unique_values) != 1:
             error_messages.append((ERROR_LEVEL_MARKER, "Game symbol '%s' has several different values: %s" % (k, v)))
             has_serious_errors = True
