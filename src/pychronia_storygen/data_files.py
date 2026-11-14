@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 """Loading of the YAML data files declared in the "data_files" entry of the project configuration."""
+import importlib
 import logging
 import os
+import sys
 
 from pychronia_storygen.document_formats import load_yaml_file, expand_lang_placeholder, StorygenConfigError
 
@@ -74,3 +76,38 @@ def load_data_files(data_files_config, language=None):
                 raise StorygenConfigError("Data file '%s' must contain a mapping, since no 'variable' name is given" % data_file)
             variables.update(data)
     return variables
+
+
+def run_variables_hook(hook_path, variables, *, language, jinja_env, import_dirs):
+    """
+    Call the "<module>.<function>" hook declared by the "variables_hook" configuration entry, and return the variables.
+
+    The module is imported with import_dirs inserted at the front of sys.path. The hook is called as
+    hook(variables, language=..., jinja_env=...), and may mutate the variables or return a new dict.
+    """
+    module_name, _, function_name = hook_path.rpartition(".")
+    if not module_name or not function_name:
+        raise StorygenConfigError("'variables_hook' must be of the form '<module>.<function>', not %r" % (hook_path,))
+
+    for import_dir in reversed(import_dirs):
+        import_dir = os.path.abspath(import_dir)
+        if import_dir in sys.path:
+            sys.path.remove(import_dir)
+        sys.path.insert(0, import_dir)
+    importlib.invalidate_caches()
+
+    try:
+        module = importlib.import_module(module_name)
+    except ImportError as exc:
+        raise StorygenConfigError("Can't import module %r of 'variables_hook': %s" % (module_name, exc))
+    hook = getattr(module, function_name, None)
+    if not callable(hook):
+        raise StorygenConfigError("Module %r has no function %r (see 'variables_hook')" % (module_name, function_name))
+
+    logging.info("Calling variables hook '%s'", hook_path)
+    result = hook(variables, language=language, jinja_env=jinja_env)
+    if result is None:
+        return variables
+    if not isinstance(result, dict):
+        raise StorygenConfigError("Variables hook %r must return None or a dict, not %s" % (hook_path, type(result).__name__))
+    return result
