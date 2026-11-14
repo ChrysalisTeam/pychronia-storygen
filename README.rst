@@ -30,6 +30,14 @@ generated RST files then go into its "_build/" subfolder::
 
     pychronia_storygen my_project --lang en --output-dir ../dist/my_project_en
 
+The command above is a shortcut for the default "build" command (``pychronia_storygen build my_project ...``).
+The "clean" command removes the generated files: the PDF files of the output folder, and the RST (".txt")
+files of the build folder, along with the subfolders they leave empty; any other file is kept.
+It accepts the same ``--lang`` (to only clean one language, else all languages are cleaned) and ``--output-dir``
+options as the build, and ``--dry-run`` lists the files without removing them::
+
+    pychronia_storygen clean my_project --lang en --dry-run
+
 From a checkout without installing the package, "python main.py" works as well, provided the dependencies are installed.
 
 Configuration reference
