@@ -1,76 +1,145 @@
 Pychronia Storygen
 ##################
 
-Generates the PDF documents of a mystery party (character sheets, inventories, game documents, coherence summaries)
-from the restructuredtext/jinja2 templates of a project folder, described by its "configuration.yaml" file.
+Generates the PDF documents of a mystery party or role-playing game (character sheets, gamemaster manuals, inventories,
+in-game documents, coherence summaries) from the restructuredtext/jinja2 templates of a project folder, described by
+its "configuration.yaml" file.
 
-Install it with pip (Python 3.11+), from a checkout of this repository::
+Along the way, it checks the coherence of the scenario: who knows which facts, which items are needed and provided,
+which secret values (codes, names...) are used, through story tags placed in templates and documents.
+
+.. contents::
+   :local:
+   :depth: 1
+
+
+Installation
+============
+
+Python 3.11+ is required. From a checkout of this repository, or directly from git::
 
     pip install .
+    pip install "pychronia-storygen @ git+https://github.com/ChrysalisTeam/pychronia-storygen.git"
 
-Then launch it with the "pychronia_storygen" command (or equivalently "python -m pychronia_storygen")::
+LibreOffice must be installed to split game documents (ODT, ODP, ODG) into PDF files; its "soffice" executable is
+searched in the PATH, then in its usual installation folders.
+
+The command is then available as "pychronia_storygen" (or "python -m pychronia_storygen"); from a checkout,
+"python main.py" works too, provided the dependencies are installed.
+
+
+Usage
+=====
+
+::
 
     pychronia_storygen example_project
+    pychronia_storygen my_project --variable lang=en --only "sheets/players/*"
+    pychronia_storygen clean my_project --variable lang=en --dry-run
 
-Generated RST files go into the "_build/" subfolder of the project, and PDF files into its "_output/" subfolder.
-LibreOffice must be installed to split game documents (ODT, ODP or ODG) into separate PDF files.
+The first form is a shortcut for the default "build" command (``pychronia_storygen build <project_dir> ...``).
+Generated RST files go into the "_build/" subfolder of the project, and PDF files into its "_output/" subfolder
+(or "_build/<lang>/" and "_output/<lang>/", see `Translated projects`_).
 
-The ``--variable NAME=VALUE`` option (or ``-V``, repeatable) sets a root variable of the project, overriding
-the "variables" entry of its configuration (see "Root variables" below)::
+Build command
+-------------
 
-    pychronia_storygen my_project --variable lang=en --variable decorations=false
+``-V NAME=VALUE``, ``--variable NAME=VALUE`` (repeatable)
+    Set a root variable, overriding the "variables" entry of the configuration (see `Root variables`_).
+    The values "true" and "false" (whatever their case) are booleans, integers like "42" are numbers, anything
+    else is a string (eg. ``--variable lang=no``, ``--variable "title=My = title"``).
 
-Translated projects name their files "<name>_<language>.<ext>" (eg. "intro_fr.rst" and "intro_en.rst"),
-and are built one language at a time, selected by the "lang" variable::
+``-o DIR``, ``--output-dir DIR``
+    Write output files into this directory, used as-is instead of "_output/" (or "_output/<lang>/");
+    RST files then go into its "_build/" subfolder.
+
+``--only PATTERN``, ``--skip PATTERN`` (repeatable)
+    Only generate the files of some items, see `Item selection`_.
+
+``--list``
+    Print the IDs of all items, marking with "[x]" those selected by ``--only``/``--skip``, without rendering or
+    generating anything.
+
+``--skip-document-splitting``
+    Parse game documents for story tags, but don't split them into PDF files (LibreOffice is then not needed).
+
+``--no-pdf``
+    Only write the RST files, without running rst2pdf, and imply ``--skip-document-splitting``: a quick check of
+    templates and of scenario coherence, but rst2pdf errors (eg. missing images) are then not detected.
+
+``-v``, ``--verbose``
+    Print debug logs.
+
+Exit codes: 0 on success; 1 if the coherence analysis found serious errors (after all files were generated), or if
+the generation failed (template error, rst2pdf or LibreOffice error...); 2 for invalid command line arguments.
+
+Item selection
+--------------
+
+Each generated item has an ID, which ``--only`` and ``--skip`` select with glob patterns (where "*" also matches
+"/"); ``--skip`` wins over ``--only``, and a pattern matching no item is an error::
+
+    sheets/<group>/.../<sheet>/full                 (or /cheat)
+    documents/<bundle>
+    inventories/<inventory>/per_section             (or /per_crate)
+    summaries/facts                                 (or /symbols, /items)
+
+For example::
+
+    pychronia_storygen my_project --list
+    pychronia_storygen my_project --only "*alice*" --only "summaries/*"
+    pychronia_storygen my_project --only "sheets/players/*" --skip "*/cheat" --no-pdf
+
+Unselected sheets, documents and inventories are still rendered (but not written), so the coherence analysis
+remains complete, and its errors still give exit code 1.
+
+Clean command
+-------------
+
+Removes the PDF files of the output folder, and the RST (".txt") files of the build folder, along with the
+subfolders they leave empty; any other file is kept. Options:
+
+- ``--variable lang=..``: only clean this language (else all languages are cleaned; other variables are ignored);
+- ``--output-dir DIR``: the output directory given to the build, if any;
+- ``--dry-run``: only list the files which would be removed;
+- ``-v``, ``--verbose``: print debug logs.
+
+Translated projects
+-------------------
+
+Translated projects name their files "<name>_<lang>.<ext>" (eg. "intro_fr.rst" and "intro_en.rst"), and are built
+one language at a time, selected by the "lang" root variable (a 2-letter lowercase code)::
 
     pychronia_storygen my_project --variable lang=en
 
-With a "lang" variable, jinja2 macros are only loaded from templates which are language-neutral or in this language,
-and files are generated in "_build/<language>/" and "_output/<language>/". When it is given on the command line,
-the "configuration_<language>.yaml" file of the project is used if it exists (else "configuration.yaml").
+With a "lang" variable:
 
-The ``--output-dir`` option forces the directory where output files are generated, used as-is
-instead of the default "_output/" (or "_output/<language>/") subfolder of the project;
-generated RST files then go into its "_build/" subfolder::
+- files are generated in "_build/<lang>/" and "_output/<lang>/";
+- if "lang" is given on the command line, the "configuration_<lang>.yaml" file of the project is used if it exists
+  (else "configuration.yaml");
+- jinja2 macros are only loaded from templates which are language-neutral or in this language;
+- the ``{lang}`` placeholder can be used in configuration paths (see `Paths with placeholders`_);
+- rst2pdf gets a ``--language`` option (for hyphenation and smart quotes);
+- templates also receive it as the "language" variable (``None`` if no language is set).
 
-    pychronia_storygen my_project --variable lang=en --output-dir ../dist/my_project_en
 
-The ``--only PATTERN`` and ``--skip PATTERN`` options (both repeatable) restrict the generated files to some items
-of the project, selected by glob patterns (where "*" also matches "/") on their IDs; ``--skip`` wins over ``--only``.
-``--list`` prints the IDs of all items, marking those selected, without rendering or generating anything::
+Project configuration
+=====================
 
-    pychronia_storygen my_project --list
-    pychronia_storygen my_project --only "sheets/players/*" --skip "*/cheat"
-    pychronia_storygen my_project --only "*alice*" --only "summaries/*"
+All top-level sections of "configuration.yaml" are optional, and unknown top-level entries are ignored
+(eg. to hold YAML anchors)::
 
-Item IDs are "sheets/<group>/.../<sheet>/full" (or "/cheat"), "documents/<bundle>",
-"inventories/<inventory>/per_section" (or "/per_crate") and "summaries/facts" (or "/symbols", "/items").
-Unselected sheets and game documents are still rendered and parsed (but not written nor converted to PDF), so the
-coherence analysis remains complete, and its errors still give a non-zero exit code. A pattern which matches no item
-is an error.
+    "variables": {...}             # root variables
+    "settings": {...}              # rst2pdf settings, see "RST to PDF settings"
+    "template_dirs": [...]         # extra template directories
+    "data_files": [...]            # YAML files loaded as variables
+    "variables_hook": "..."        # Python function preparing the variables
+    "sheet_generation": {...}      # full sheets and cheat sheets
+    "document_generation": {...}   # splitting of ODT/ODP/ODG files
+    "inventory_generation": {...}  # lists of game items
+    "summary_generation": {...}    # coherence summaries
 
-The ``--no-pdf`` option only writes the intermediate RST files, without running rst2pdf, and doesn't split game
-documents (it implies ``--skip-document-splitting``): it is a quick check of templates and of scenario coherence,
-which can be combined with ``--only``/``--skip``, but rst2pdf errors (e.g. missing images) are then not detected.
-
-The command above is a shortcut for the default "build" command (``pychronia_storygen build my_project ...``).
-The "clean" command removes the generated files: the PDF files of the output folder, and the RST (".txt")
-files of the build folder, along with the subfolders they leave empty; any other file is kept.
-It accepts the same ``--variable lang=..`` (to only clean one language, else all languages are cleaned; other
-variables are ignored) and ``--output-dir`` options as the build, and ``--dry-run`` lists the files without
-removing them::
-
-    pychronia_storygen clean my_project --variable lang=en --dry-run
-
-From a checkout without installing the package, "python main.py" works as well, provided the dependencies are installed.
-
-Configuration reference
-=======================
-
-All top-level sections of "configuration.yaml" are optional ("sheet_generation", "document_generation",
-"inventory_generation", "summary_generation"), as are the "sheets" of a group, all keys of an inventory,
-and each of the three summary templates (facts, symbols, items, each with its destination).
-The coherence analysis runs at the end even if no summary template is configured.
+See "example_project/" for a complete project.
 
 Root variables
 --------------
@@ -82,41 +151,32 @@ Root variables
       "game_type": "standard"
       "decorations": true
 
-The root variables are those of the top-level "variables" entry of the configuration, overridden (or completed)
-by the ``--variable NAME=VALUE`` options of the command line. Names are made of letters, digits and underscores.
-On the command line, the values "true" and "false" (whatever their case) are booleans, integers like "42" are
-numbers, and anything else is a string (eg. ``--variable lang=no``, ``--variable "title=My = title"``).
+The root variables are those of the top-level "variables" entry, overridden (or completed) by the ``--variable``
+options of the command line; names are made of letters, digits and underscores. They are available:
 
-Root variables are exposed in three places:
-
-- as jinja2 variables in all templates (``{{ game_type }}``, ``{% if decorations %}``), like the variables of
-  data files, hooks, groups and sheets;
+- as jinja2 variables in all templates (``{{ game_type }}``, ``{% if decorations %}``);
 - as ``{name}`` placeholders in the paths of the configuration (see below);
-- as jinja2 variables in some string settings (see "RST to PDF settings").
+- as jinja2 variables in some string settings (see `RST to PDF settings`_).
 
 Variables coming from elsewhere (data files, Python hook, "variables" of groups and sheets) are only available
-in templates, NOT in path placeholders nor in settings.
+in templates, NOT in path placeholders nor in settings. Templates also receive "project_dir" (absolute path of the
+project folder, with forward slashes).
 
-The "lang" variable is special: it must be a 2-letter lowercase code (eg. "fr"), and is the language of the
-generated documents (see above). Templates and hooks also receive it as "language" (``None`` if no language is set).
-
-Paths with ``{name}`` placeholders
-----------------------------------
+Paths with placeholders
+-----------------------
 
 Every path-valued entry (sheet parts, "document_source", "inventory_*" and "game_*" templates/destinations/data,
 "template_dirs", "data_files", the "rst2pdf_conf_file" and "docutils_conf_file" settings) may contain ``{name}``
-placeholders, replaced by the value of the root variable of that name (a string, a number, or a boolean
-rendered as "true"/"false")::
+placeholders, replaced by the value of the root variable of that name (a boolean becomes "true"/"false")::
 
     "full_sheet": ["intro.{game_type}_{lang}.rst", "common_{lang}.rst"]
 
 So one configuration serves all languages and variants of a project. A placeholder without matching root
-variable is an error (eg. ``{lang}`` when no language is set).
-In YAML, quote values with braces inside flow lists: ``["intro_{lang}.rst"]``.
+variable is an error (eg. ``{lang}`` when no language is set). In YAML, quote values with braces inside flow lists.
 
 Sheet parts may also use the ``{sheet_name}`` and ``{group_name}`` placeholders (the names of the current sheet
 and of its innermost group), so that similar sheets can share their list of parts through YAML anchors, aliases
-and ``<<`` merge keys (unknown top-level entries of the configuration are ignored, eg. to hold such anchors)::
+and ``<<`` merge keys::
 
     "sheet_templates":
       "player_sheet": &player_sheet
@@ -139,8 +199,7 @@ Extra template directories
     "template_dirs": ["../common/templates"]
 
 Directories relative to the project folder, searched for templates AFTER the project folder (which has priority),
-and also scanned for jinja2 macros (with the same language filtering). The "_build"/"_output" exclusions
-only concern the project folder.
+and also scanned for jinja2 macros (with the same language filtering).
 
 Data files
 ----------
@@ -155,8 +214,8 @@ Data files
       - file: dump.yaml
         overlay: dump_{lang}.yaml                # optional partial translation, deep-merged if the file exists
 
-Entries are loaded in order (later ones override earlier ones). Root variables loaded from data files have
-a lower priority than the "variables" of the configuration. Every key of an overlay must exist in the base data.
+Entries are loaded in order (later ones override earlier ones), and have a lower priority than the root variables.
+Every key of an overlay must exist in the base data.
 
 Python hook
 -----------
@@ -165,25 +224,130 @@ Python hook
 
     "variables_hook": "my_hooks.prepare_variables"
 
-The module is imported with the project folder and the "template_dirs" at the front of "sys.path".
-The function is called once, after data files are loaded and before any generation, as
-``prepare_variables(variables, *, language, jinja_env)``, where "variables" is the dict of root variables
-(data files, then configuration "variables", ``--variable`` options, "project_dir" and "language"). It may mutate it, or return a new dict.
-It can also register jinja2 filters on ``jinja_env``.
+The module is imported with the project folder and the "template_dirs" at the front of "sys.path". The function is
+called once, after data files are loaded and before any generation, as
+``prepare_variables(variables, *, language, jinja_env)``, where "variables" is the dict of all variables available
+to templates at this point. It may mutate it or return a new dict, and can register jinja2 filters on ``jinja_env``.
 
-current_player_id
------------------
+Sheets
+------
 
-The name of a sheet is only the DEFAULT value of its "current_player_id" variable. A "variables" entry
-"current_player_id" at group level applies to the sheets of the group (and subgroups) unless a sheet defines its own;
-an explicit ``null`` disables the registration of story tags for that sheet.
+::
+
+    "sheet_generation":
+      "variables": {"intro_message": "Welcome!"}
+      "sheets":
+        "world_history":
+          "full_sheet": "lore/world_history_full.rst"       # a template, or a list of templates
+          "cheat_sheet": "lore/world_history_summary.rst"
+      "groups":
+        "players":
+          "variables": {"is_player": true}
+          "settings": {"rst2pdf_extra_args": "--stylesheets=dark"}
+          "sheets":
+            "alice":
+              "variables": {"faction": "rebels"}
+              "full_sheet": ["characters/intro.rst", "characters/alice.rst"]
+          "groups": {...}                                    # nested subgroups
+
+Groups nest freely. Each sheet may have a "full_sheet" and/or a "cheat_sheet", whose templates are rendered and
+concatenated into "<group>/.../<sheet>_full_sheet.pdf" (and "_cheat_sheet.pdf"). "variables" and "settings" may be
+set at every level (root, group, sheet), the innermost ones winning.
+
+Besides all variables, sheet templates receive "sheet_name", "group_name" (innermost group, or ``None``),
+"group_breadcrumb" (tuple of group names), "is_cheat_sheet", and "current_player_id": the character to whom the
+story tags of the sheet are attributed. It defaults to the sheet name, but can be set in the "variables" of a group
+(for all its sheets, unless they define their own) or of a sheet; an explicit ``null`` disables the registration
+of facts, eg. for gamemaster documents.
+
+Game documents
+--------------
+
+A "document_generation" bundle exports an OpenDocument file to PDF with LibreOffice, then splits it into one PDF
+per document::
+
+    "document_generation":
+      "game_clues":
+        "document_source": "documents/game_clues_{lang}.odt"
+        "comment_sample":             # optional, a string or a per-language mapping
+          "fr": "{% xfact"
+          "en": "{% xfact"
+        "document_splitting":
+          - [recipes_of_potions, 2]                       # name, page count
+          - [null, 1]                                     # null name: these pages are skipped
+          - [useless_messages, 1, "Dear diary"]           # name, page count, text of the first page
+          - [oracle_vision, 3, {fr: "Vision", en: "Vision of"}]  # per-language text ("lang" variable)
+          - [map, 1, null]                                # null text: the first page must have no text
+
+The source may be a text document (".odt"), a presentation (".odp", eg. a map drawn in Impress, one page per slide)
+or a drawing (".odg"), or their flat XML variants (".fodt", ".fodp", ".fodg"); other formats are rejected.
+The PDFs go into a folder named after the source file, without its language suffix
+(eg. "_output/en/documents/game_clues/recipes_of_potions.pdf").
+
+The text of the document, gamemaster comments included, is first rendered with jinja2 to register its story tags
+(only the tags, and the "document_bundle_name" variable, are available there). "comment_sample" is a text which
+it must contain, else the generation fails: it proves that the story tags written in comments were extracted.
+
+The source file is then exported once (without its gamemaster comments), and each part is extracted with pypdf,
+keeping only the images and fonts it uses. The generation fails if the exported file has comment annotations, if the
+declared page counts don't add up to the number of pages, or if the first page of a part doesn't contain its text
+snippet (compared ignoring case and whitespace). Entries with only a name and a page count are not checked on their
+first page, and a language missing from a per-language mapping disables the check for that language. The PDFs of the
+parts are removed before each export.
+
+Inventories
+-----------
+
+::
+
+    "inventory_generation":
+      "main_inventory":
+        "inventory_data": "inventories/game_inventory_data.yaml"
+        "inventory_per_section_template": "inventories/game_inventory_per_section.rst"
+        "inventory_per_section_destination": "inventories/main_inventory_per_section"
+        "inventory_per_crate_template": "inventories/game_inventory_per_crate.rst"
+        "inventory_per_crate_destination": "inventories/main_inventory_per_crate"
+
+The data file maps section titles (eg. places) to lists of item titles::
+
+    "@WEAPONS Armory IMPORTANT":
+      - "Long sword"
+      - "Potion of Fire {% item 'potion of fire' is provided %}"
+    "Abandoned house":
+      - "@POTIONS Old potion IMPORTANT"
+
+A title starting with "@NAME " puts the item (or all items of the section) in the crate "NAME" (by default, items
+of a section go into a crate named after it); the "IMPORTANT" marker flags the item (or all items of the section)
+as important. Templates receive "inventory_name", and "items_per_section" (or "items_per_crate"): a mapping of
+section (or crate) titles to lists of ``{"item_title": ..., "item_is_important": ...}``. Render item titles with
+the "dangerous_render" filter (see `Templates`_) to process their story tags. Each destination is a path without
+extension, relative to the build and output folders; "variables" and "settings" may be set per inventory.
+
+Summaries
+---------
+
+::
+
+    "summary_generation":
+      "game_facts_template": "summaries/game_facts_summary.rst"
+      "game_facts_destination": "summaries/game_facts_summary"
+      "game_symbols_template": "summaries/game_symbols_summary.rst"
+      "game_symbols_destination": "summaries/game_symbols_summary"
+      "game_items_template": "summaries/game_items_summary.rst"
+      "game_items_destination": "summaries/game_items_summary"
+
+Each summary is optional, and generated after all other items. Its template receives the matching registry (see
+`Story tags and coherence analysis`_), "has_serious_errors", and "error_messages" (a list of
+``(level, message)`` pairs, level being "ERROR" or "WARNING"):
+
+- "facts_registry": ``{fact_name: {player_id: {"is_author", "is_viewer", "in_cheat_sheet", "in_normal_sheet"}}}``;
+- "symbols_registry": ``{symbol_name: set_of_values}``;
+- "items_registry": ``{item_name: set_of_statuses}``.
 
 RST to PDF settings
 -------------------
 
-In French (or without "lang" variable), the space before "!", "?", ";" and before ":" (when followed by a space or a line break) becomes a non-breaking space in the final RST file; byte order marks (BOM) of the templates are removed.
-
-Hierarchical "settings" (project, group, sheet levels):
+Hierarchical "settings" (project, group, sheet, inventory and summary levels):
 
 - "rst2pdf_conf_file": rst2pdf configuration file (``--config`` option).
 - "rst2pdf_extra_args": extra command line arguments given to rst2pdf, eg. "--stylesheets=simple_large,dark".
@@ -192,7 +356,7 @@ Hierarchical "settings" (project, group, sheet levels):
 - "unlink_unknown_rst_targets": if true, references like \`text\`_ to unknown targets are turned into plain text
   in the final RST file, before the PDF conversion.
 
-The string settings "rst2pdf_extra_args", "rst2pdf_conf_file" and "docutils_conf_file" may contain jinja2 markup,
+The settings "rst2pdf_extra_args", "rst2pdf_conf_file" and "docutils_conf_file" may contain jinja2 markup,
 rendered with the root variables only (an undefined variable is an error). For example, to let
 ``--variable decorations=false`` switch all documents to a printer-friendly style::
 
@@ -201,47 +365,54 @@ rendered with the root variables only (an undefined variable is an error). For e
     "settings":
       "rst2pdf_extra_args": "--stylesheets={{ 'simple_large,dark_background' if decorations else 'simple_tight' }}"
 
-PDF files are always generated compressed (rst2pdf ``--compressed`` option, whatever the rst2pdf configuration file says).
+PDF files are always compressed, and rst2pdf also gets the options ``--fit-background-mode=scale``,
+``--first-page-on-right``, ``--break-side=any`` and ``--fit-literal-mode=shrink``, as well as a fixed version of its
+"dotted_toc" extension. rst2pdf errors (missing images, unknown targets...) are detected in its output even when it
+exits with code 0: the generation then fails, and no stale PDF is left behind.
 
-rst2pdf errors (missing images, unknown targets...) are detected in its output even when it exits with code 0:
-the generation fails, and no stale PDF is left behind.
 
-Game documents (ODT, ODP, ODG)
-------------------------------
+Templates
+=========
 
-A "document_generation" bundle exports an OpenDocument file (``document_source``, which may contain "{lang}") to PDF
-with LibreOffice, then splits it into one PDF per document, in a folder named after the source file. The source may be
-a text document (".odt"), a presentation (".odp", e.g. a map drawn in Impress, one page per slide) or a drawing
-(".odg"), or their flat XML variants (".fodt", ".fodp", ".fodg"); other formats are rejected::
+Templates are restructuredtext files rendered with jinja2, where an undefined variable is an error.
 
-    document_generation:
-      game_clues:
-        document_source: "documents/game_clues_{lang}.odt"
-        comment_sample:               # optional, a string or a per-language mapping
-          fr: "{% xfact"
-          en: "{% xfact"
-        document_splitting:
-          - [recipes_of_potions, 2]                       # name, page count
-          - [null, 1]                                     # null name: these pages are skipped
-          - [useless_messages, 1, "Dear diary"]           # name, page count, text of the first page
-          - [oracle_vision, 3, {fr: "Vision", en: "Vision of"}]  # per-language text ("lang" variable)
-          - [map, 1, null]                                # null text: the first page must have no text
+- **Macros**: the macros defined in any ".rst" or ".txt" template of the project folder and of the "template_dirs"
+  (except "_build/" and "_output/") are available everywhere, as macro tags: ``<{ my_macro "value" key=other }/>``,
+  or ``<{ my_macro }>body, available through caller()</{ my_macro }>``.
+- **dangerous_render** filter: renders a string (eg. coming from a data file) as a jinja2 template, with the current
+  variables, so that the story tags it contains are processed: ``{{ item.item_title|dangerous_render }}``.
+- **Special markup**: ``[BR]`` becomes a vertical space, and ``[PAGEBREAK]`` a page break, in the final RST file.
+- **Typography**: in French (or without "lang" variable), the space before "!", "?", ";" and before ":" (when
+  followed by a space or a line break) becomes a non-breaking space; byte order marks (BOM) of templates are removed.
 
-The source file is exported once (without its gamemaster comments), then each part is extracted with pypdf, keeping
-only the images and fonts it uses. The generation fails if the exported file has comment annotations, if the declared
-page counts don't add up to the number of pages, or if the first page of a part doesn't contain its text snippet
-(compared ignoring case and whitespace). Entries with only a name and a page count are not checked on their first page,
-and a language missing from a per-language mapping disables the check for that language.
-The PDFs of the parts are removed before each export.
 
-"comment_sample" (optional) is a text which the document text, gamemaster comments included, must contain, else the
-generation fails: it proves that the story tags written in comments were extracted.
+Story tags and coherence analysis
+=================================
 
-Command line
-------------
+Story tags can be placed in templates, in data rendered with "dangerous_render", and in the text or gamemaster
+comments of game documents. Each tag outputs its first argument; its "x" variant (``xfact``, ``xsymbol``,
+``xitem``) outputs nothing. Names are case-insensitive.
 
-Storygen exits with a non-zero code if the coherence analysis finds serious errors, after all files were generated.
-With ``--skip-document-splitting``, game documents are still parsed for story tags, but not split into PDFs
-(LibreOffice is then not needed).
+``{% fact "alice_stole_the_key" %}``, ``{% fact "alice_stole_the_key" as author %}``
+    The current character ("current_player_id") knows this fact, as a viewer (default) or as its author.
 
-Tests are run with "pytest" (a dev dependency).
+``{% symbol "1256" for "vault_code" %}``
+    A secret value, which must be the same everywhere it is used.
+
+``{% item "vault_key" is needed %}``, ``{% item "vault_key" is provided %}``
+    A game item, needed by the scenario (eg. to solve an enigma) or provided (eg. in the gamemaster checklist).
+
+After all items were rendered, the analysis reports these errors, which make the command exit with code 1:
+
+- a fact is in the cheat sheet of a character, but not in their full sheet;
+- a character is both author and viewer of a fact;
+- a symbol has several different values (compared ignoring case and surrounding whitespace);
+- an item is needed but never provided.
+
+An item provided but never needed is only a warning. All errors are logged, and passed to the summary templates.
+
+
+Development
+===========
+
+Install the dependencies with ``poetry install``, and run the tests with ``pytest``.
