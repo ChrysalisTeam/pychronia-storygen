@@ -156,6 +156,34 @@ def test_only_root_variables_are_usable_in_placeholders(storygen):
     assert "Advanced sheet" in storygen.build_text("alice_full_sheet.txt")
 
 
+def test_sheet_and_group_name_placeholders_in_shared_sheet_parts(storygen):
+    # One list of parts (a YAML anchor, reused with "<<" merge keys) serves several sheets
+    storygen.write("configuration.yaml", """
+        sheet_generation:
+          groups:
+            players:
+              sheets:
+                alice: &player_sheet
+                  full_sheet: ["{group_name}/{sheet_name}/{sheet_name}_intro_{lang}.rst", common.rst]
+                bob:
+                  <<: *player_sheet
+                  variables: {extra: "Bob extra"}
+        """)
+    for name in ("alice", "bob"):
+        storygen.write("players/%s/%s_intro_en.rst" % (name, name), "Intro of %s {{ extra | default('') }}" % name)
+    storygen.write("common.rst", "Common")
+    storygen.run("--variable", "lang=en")
+    assert "Intro of alice" in storygen.build_text("players/alice_full_sheet.txt", lang="en")
+    assert "Intro of bob Bob extra" in storygen.build_text("players/bob_full_sheet.txt", lang="en")
+
+
+def test_sheet_name_placeholder_only_in_sheet_parts(storygen):
+    _write_project(storygen, CONFIG.replace("inv_{lang}.yaml", "inv_{sheet_name}.yaml"))
+    result = storygen.run("--variable", "lang=en", expect_ok=False)
+    assert result.exit_code != 0
+    assert "{sheet_name}" in result.output
+
+
 JINJA_SETTINGS_CONFIG = """
     variables:
       decorations: true

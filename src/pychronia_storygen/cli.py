@@ -110,7 +110,11 @@ def _recursively_generate_group_sheets(data_tree: dict, group_breadcrumb: tuple,
 
             # Be tolerant if a single string was entered
             sheet_parts = (sheet_parts,) if isinstance(sheet_parts, str) else sheet_parts
-            sheet_parts = [expand_path_placeholders(part, player_storygen_settings.path_variables) for part in sheet_parts]
+            # Sheet parts may also use the "{sheet_name}" and "{group_name}" placeholders, eg. to share (with YAML
+            # anchors) the list of parts of similar sheets, like "players/{sheet_name}/{sheet_name}_intro_{lang}.rst"
+            sheet_path_variables = dict(player_storygen_settings.path_variables, sheet_name=sheet_name,
+                                        **({"group_name": group_name} if group_name else {}))
+            sheet_parts = [expand_path_placeholders(part, sheet_path_variables) for part in sheet_parts]
 
             full_rst_content = ""
             for sheet_part in sheet_parts:

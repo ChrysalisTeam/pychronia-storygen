@@ -96,6 +96,23 @@ So one configuration serves all languages and variants of a project. A placehold
 variable is an error (eg. ``{lang}`` when no language is set).
 In YAML, quote values with braces inside flow lists: ``["intro_{lang}.rst"]``.
 
+Sheet parts may also use the ``{sheet_name}`` and ``{group_name}`` placeholders (the names of the current sheet
+and of its innermost group), so that similar sheets can share their list of parts through YAML anchors, aliases
+and ``<<`` merge keys (unknown top-level entries of the configuration are ignored, eg. to hold such anchors)::
+
+    "sheet_templates":
+      "player_sheet": &player_sheet
+        "full_sheet": ["players/{sheet_name}/{sheet_name}_intro_{lang}.rst", "common_rules_{lang}.rst"]
+
+    "sheet_generation":
+      "groups":
+        "players":
+          "sheets":
+            "alice": *player_sheet
+            "bob":
+              <<: *player_sheet
+              "variables": {"has_secret_weapon": true}
+
 Extra template directories
 --------------------------
 
