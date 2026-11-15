@@ -3,7 +3,8 @@ Pychronia Storygen
 
 Generates the PDF documents of a mystery party or role-playing game (character sheets, gamemaster manuals, inventories,
 in-game documents, coherence summaries) from the restructuredtext/jinja2 templates of a project folder, described by
-its "configuration.yaml" file.
+its "configuration.yaml" file. It can also prepare the emails which send these documents to participants (see
+`Emails`_).
 
 Along the way, it checks the coherence of the scenario: who knows which facts, which items are needed and provided,
 which secret values (codes, names...) are used, through story tags placed in templates and documents.
@@ -61,7 +62,8 @@ Build command
     generating anything.
 
 ``--skip-document-splitting``
-    Parse game documents for story tags, but don't split them into PDF files (LibreOffice is then not needed).
+    Parse game documents for story tags, but don't split them into PDF files (LibreOffice is then not needed);
+    missing email attachments are then only warned about (see `Emails`_).
 
 ``--no-pdf``
     Only write the RST files, without running rst2pdf, and imply ``--skip-document-splitting``: a quick check of
@@ -82,6 +84,7 @@ Each generated item has an ID, which ``--only`` and ``--skip`` select with glob 
     sheets/<group>/.../<sheet>/full                 (or /cheat)
     documents/<bundle>
     inventories/<inventory>/per_section             (or /per_crate)
+    emails/<batch>/<email>
     summaries/facts                                 (or /symbols, /items)
 
 For example::
@@ -91,13 +94,15 @@ For example::
     pychronia_storygen my_project --only "sheets/players/*" --skip "*/cheat" --no-pdf
 
 Unselected sheets, documents and inventories are still rendered (but not written), so the coherence analysis
-remains complete, and its errors still give exit code 1.
+remains complete, and its errors still give exit code 1. Unselected emails are not rendered at all; a selected email
+attaches the files present at that time, so ``--only "emails/*"`` prepares the emails from the PDFs of a former
+full build.
 
 Clean command
 -------------
 
-Removes the PDF files of the output folder, and the RST (".txt") files of the build folder, along with the
-subfolders they leave empty; any other file is kept. Options:
+Removes the PDF files of the output folder, all the files of its "emails/" folder (see `Emails`_), and the RST
+(".txt") files of the build folder, along with the subfolders they leave empty; any other file is kept. Options:
 
 - ``--variable lang=..``: only clean this language (else all languages are cleaned; other variables are ignored);
 - ``--output-dir DIR``: the output directory given to the build, if any;
@@ -137,6 +142,7 @@ All top-level sections of "configuration.yaml" are optional, and unknown top-lev
     "sheet_generation": {...}      # full sheets and cheat sheets
     "document_generation": {...}   # splitting of ODT/ODP/ODG files
     "inventory_generation": {...}  # lists of game items
+    "email_generation": {...}      # folders of emails to send by hand
     "summary_generation": {...}    # coherence summaries
 
 See "example_project/" for a complete project.
@@ -322,6 +328,71 @@ as important. Templates receive "inventory_name", and "items_per_section" (or "i
 section (or crate) titles to lists of ``{"item_title": ..., "item_is_important": ...}``. Render item titles with
 the "dangerous_render" filter (see `Templates`_) to process their story tags. Each destination is a path without
 extension, relative to the build and output folders; "variables" and "settings" may be set per inventory.
+
+Emails
+------
+
+Storygen doesn't send any email: it prepares one folder per email, with an RST file holding its recipients, subject
+and body, and a copy of its attachments. You then create and send each email with your own mail client::
+
+    "email_generation":
+      "players":                                  # email batch
+        "subject": "Mystery party - your sheet for {{ characters[email_name].name }}"
+        "recipients": ["{{ characters[email_name].email }}"]
+        "body_template": "emails/player_email_{lang}.rst"
+        "attachments":
+          - "{output_dir}/common/game_rules_full_sheet.pdf"
+          - "{output_dir}/players/{email_name}_full_sheet.pdf"
+        "emails":                                 # email names, with optional overrides
+          "alice": {}
+          "bob":
+            "subject": "Mystery party - your sheet, and a secret map"
+            "attachments": ["{output_dir}/documents/game_clues/map.pdf"]
+
+Each email gets a folder "<output folder>/emails/<batch>/<email>/" (eg. "_output/en/emails/players/bob/"),
+containing its attachments and a "<email>_email.rst" file::
+
+    Mystery party - your sheet for Bob
+    ==================================
+
+    :To: bob@example.com
+    :Subject: Mystery party - your sheet for Bob
+    :Attachments: game_rules_full_sheet.pdf, bob_full_sheet.pdf, map.pdf
+
+    ----
+
+    <body rendered from the body template>
+
+To send it, create a new email in your mail client, copy the recipients, the subject and the body (below the
+horizontal line), and attach all the other files of the folder.
+
+Entries of an email:
+
+- "subject" and "recipients" are jinja2 strings (a single one, or a list for recipients), "body_template" is a
+  template file; they may be set on the batch, or on an email, which then replaces the value of the batch. In
+  translated projects, "subject" may be a per-language mapping (eg. ``{fr: "Votre fiche", en: "Your sheet"}``);
+- "attachments" are paths, relative to the project folder; those of an email are added to those of its batch.
+  Besides root variables, these paths and "body_template" may use the ``{email_name}``, ``{email_batch_name}`` and
+  ``{output_dir}`` (the output folder of the build, eg. "_output/en") placeholders, to attach the PDF files
+  generated by the same build (emails are prepared after sheets, documents and inventories);
+- "variables" may be set per batch and per email; templates also receive "email_name" and "email_batch_name".
+
+Beware, jinja2 renders a null value as "None": write ``{{ person.email or '' }}`` for data which may be null, so that
+such recipients are seen as empty.
+
+Checks:
+
+- the folder of an email is removed and recreated at each build, so an attachment removed from the configuration is
+  never left there;
+- a missing attachment is an error, except with ``--no-pdf`` or ``--skip-document-splitting`` (generated PDFs may
+  be missing then), where it is only skipped with a warning; two attachments with the same file name are an error;
+- empty recipients are ignored (eg. placeholder data of participants), and an email left without recipient gets
+  "(MISSING)" in its RST file, with a single warning per batch listing these emails; a recipient without "@", or
+  receiving several emails of the same batch, gives a warning.
+
+The RST file is written as-is (no typographic conversion), so that it can be copied into a mail client. Since these
+folders usually contain personal data (names and emails of participants), keep the output folder out of version
+control.
 
 Summaries
 ---------

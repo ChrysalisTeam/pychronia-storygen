@@ -5,6 +5,7 @@ import fnmatch
 import logging
 import os
 import re
+import shutil
 from collections import ChainMap
 from pathlib import Path
 from pprint import pprint
@@ -273,6 +274,137 @@ def _generate_document_files(document_bundle_name, document_config, storygen_set
         language=storygen_settings.language)
 
 
+# Subfolder of the output folder where email folders are prepared (it only contains generated files)
+EMAILS_FOLDER = "emails"
+MISSING_RECIPIENT_MARKER = "(MISSING)"
+
+
+def _format_email_rst(subject, recipients, attachment_names, body):
+    """Return the content of the RST file of an email, to be copied by hand into a mail client."""
+    title = subject or "(no subject)"
+    lines = [
+        title,
+        "=" * len(title),
+        "",
+        ":To: %s" % (", ".join(recipients) or MISSING_RECIPIENT_MARKER),
+        ":Subject: %s" % subject,
+        ":Attachments: %s" % (", ".join(attachment_names) or "(none)"),
+        "",
+        "----",
+        "",
+        body.strip("\n"),
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def _generate_email_folders(batch_name, batch_config, storygen_settings: StorygenSettings, allow_missing_attachments=False):
+    """
+    Prepare one folder per email of this batch, in "<output dir>/emails/<batch>/<email>/": an RST file with the
+    recipients, subject and body of the email, and a copy of its attachments. Nothing is sent, the user creates and
+    sends these emails with their own mail client.
+
+    Missing attachments are an error, unless allow_missing_attachments is set (when the build doesn't generate all
+    PDF files), in which case they are skipped with a warning.
+    """
+    batch_config = batch_config or {}
+    batch_settings = storygen_settings.derive(batch_config)
+    del storygen_settings  # Safety
+    selection = batch_settings.selection
+
+    emails = batch_config.get("emails") or {}
+    if isinstance(emails, (list, tuple)):  # Be tolerant, a list of names means emails without overrides
+        emails = {email_name: {} for email_name in emails}
+    if not isinstance(emails, dict):
+        raise StorygenConfigError("The 'emails' of email batch '%s' must be a mapping of email names" % batch_name)
+
+    emails_without_recipients = []
+    emails_per_recipient = {}
+
+    for email_name, email_config in emails.items():
+
+        # Unlike sheets, unselected emails are not rendered at all, since they have no story tags to register
+        if not selection.is_selected("%s/%s/%s" % (EMAILS_FOLDER, batch_name, email_name)):
+            continue
+
+        email_config = email_config or {}
+        logging.info("Preparing folder of email '%s' of batch '%s'" % (email_name, batch_name))
+        email_settings = batch_settings.derive(email_config, email_name=email_name, email_batch_name=batch_name)
+        jinja_env = email_settings.jinja_env
+        jinja_context = dict(email_settings.dynamic_variables)
+        email_label = "%s/%s" % (batch_name, email_name)
+
+        def _get_entry(key):
+            value = email_config.get(key, batch_config.get(key))  # Per-email values replace those of the batch
+            if not value:
+                raise StorygenConfigError("Email '%s' has no '%s' entry (in its batch or in itself)" % (email_label, key))
+            return value
+
+        def _render_string(template_string):
+            if not isinstance(template_string, str):
+                raise StorygenConfigError("Email '%s' has a non-string entry: %r" % (email_label, template_string))
+            if not template_string.strip():
+                return ""
+            return render_with_jinja(content=template_string, jinja_env=jinja_env, jinja_context=jinja_context).strip()
+
+        email_path_variables = dict(email_settings.path_variables, email_name=email_name, email_batch_name=batch_name,
+                                    output_dir=email_settings.output_root_dir.as_posix())
+
+        subject = _get_entry("subject")
+        if isinstance(subject, dict):  # Per-language subjects, since a configuration may serve several languages
+            if subject.get(email_settings.language) is None:
+                raise StorygenConfigError("Email '%s' has no subject for language %r" % (email_label, email_settings.language))
+            subject = subject[email_settings.language]
+        subject = " ".join(_render_string(subject).split())  # On a single line
+
+        recipients = _get_entry("recipients")
+        recipients = [recipients] if isinstance(recipients, str) else recipients
+        recipients = [recipient for recipient in (_render_string(x) for x in recipients) if recipient]
+        if not recipients:
+            emails_without_recipients.append(email_name)
+        for recipient in recipients:
+            if "@" not in recipient:
+                logging.warning("Email '%s' has a recipient which doesn't look like an email address: %r",
+                                email_label, recipient)
+            emails_per_recipient.setdefault(recipient, []).append(email_name)
+
+        body_template = expand_path_placeholders(_get_entry("body_template"), email_path_variables)
+        body = render_with_jinja(filename=body_template, jinja_env=jinja_env, jinja_context=jinja_context)
+
+        rst_filename = "%s_email.rst" % email_name
+        attachments = list(batch_config.get("attachments") or []) + list(email_config.get("attachments") or [])
+        attachment_files = {}  # Basename -> source path
+        for attachment in attachments:
+            attachment_file = Path(expand_path_placeholders(attachment, email_path_variables))
+            if not attachment_file.is_file():
+                if allow_missing_attachments:
+                    logging.warning("Skipping missing attachment '%s' of email '%s' (PDF generation is partly disabled)",
+                                    attachment_file, email_label)
+                    continue
+                raise StorygenConfigError("Attachment '%s' of email '%s' does not exist" % (attachment_file, email_label))
+            if attachment_file.name in attachment_files or attachment_file.name == rst_filename:
+                raise StorygenConfigError("Email '%s' has several attachments named '%s'" % (email_label, attachment_file.name))
+            attachment_files[attachment_file.name] = attachment_file
+
+        # The folder is recreated from scratch, so that no stale attachment is ever sent
+        email_dir = email_settings.output_root_dir.joinpath(EMAILS_FOLDER, batch_name, email_name)
+        if email_dir.exists():
+            shutil.rmtree(email_dir)
+        email_dir.mkdir(parents=True)
+        for attachment_name, attachment_file in attachment_files.items():
+            shutil.copy2(attachment_file, email_dir.joinpath(attachment_name))
+        rst_content = _format_email_rst(subject, recipients=recipients, attachment_names=list(attachment_files), body=body)
+        email_dir.joinpath(rst_filename).write_text(rst_content, encoding="utf8")
+
+    if emails_without_recipients:  # A single warning, since it's normal when private data are not filled
+        logging.warning("Emails of batch '%s' without any recipient (marked %s in their RST file): %s",
+                        batch_name, MISSING_RECIPIENT_MARKER, ", ".join(emails_without_recipients))
+    for recipient, email_names in emails_per_recipient.items():
+        if len(email_names) > 1:
+            logging.warning("Recipient %r receives several emails of batch '%s': %s",
+                            recipient, batch_name, ", ".join(email_names))
+
+
 def _generate_summary_files(summary_config, storygen_settings: StorygenSettings):
 
     summary_config = summary_config or {}
@@ -409,7 +541,7 @@ def _get_output_and_build_root_dirs(language, output_dir):
                    "intermediate build files then go into its '_build/' subfolder.")
 @click.option("--skip-document-splitting", "skip_document_splitting", is_flag=True,
               help="Parse ODT game documents for story tags, but don't split them into PDF files "
-                   "(LibreOffice is then not needed).")
+                   "(LibreOffice is then not needed); missing email attachments are then only warned about.")
 @click.option("--only", "only_patterns", multiple=True, metavar="PATTERN",
               help="Only generate the files of the items whose ID matches this glob pattern (can be repeated), "
                    "eg. 'sheets/players/*', '*alice*' or '*/cheat'; see --list for the IDs. Unselected items "
@@ -429,8 +561,8 @@ def build(project_dir, verbose, variable_pairs, output_dir, skip_document_splitt
     """Generate the files of the project folder PROJECT_DIR (default command).
 
     Items whose files can be selected with --only/--skip have IDs like "sheets/<group>/.../<sheet>/full" (or
-    "/cheat"), "documents/<bundle>", "inventories/<inventory>/per_section" (or "/per_crate") and
-    "summaries/facts" (or "/symbols", "/items").
+    "/cheat"), "documents/<bundle>", "inventories/<inventory>/per_section" (or "/per_crate"),
+    "emails/<batch>/<email>" and "summaries/facts" (or "/symbols", "/items").
     """
     project_dir = os.path.abspath(project_dir).rstrip("\\/") + os.path.sep
     if output_dir:
@@ -526,6 +658,13 @@ def build(project_dir, verbose, variable_pairs, output_dir, skip_document_splitt
                                       inventory_config=inventory_config,
                                       storygen_settings=storygen_settings)
 
+    # PREPARE EMAIL FOLDERS (after sheets and documents, which provide their attachments)
+    email_generation_tree = project_data_tree.get("email_generation")
+    if email_generation_tree:
+        for batch_name, batch_config in email_generation_tree.items():
+            _generate_email_folders(batch_name, batch_config=batch_config, storygen_settings=storygen_settings,
+                                    allow_missing_attachments=no_pdf or skip_document_splitting)
+
     # GENERATE SUMMARIES, and analyse scenario coherence (after all other items, which register story tags)
     summary_config = project_data_tree.get("summary_generation") or {}
     has_serious_errors = _generate_summary_files(summary_config, storygen_settings=storygen_settings)
@@ -570,8 +709,9 @@ def _remove_empty_subfolders(root_dir: Path, dry_run):
 def clean(project_dir, verbose, variable_pairs, output_dir, dry_run):
     """Remove the files generated from the project folder PROJECT_DIR.
 
-    Only the PDF files of the output folder, and the intermediate RST (".txt") files of the build folder,
-    are removed, along with the subfolders they leave empty; any other file is kept.
+    Only the PDF files of the output folder, all the files of its "emails/" folder, and the intermediate RST
+    (".txt") files of the build folder, are removed, along with the subfolders they leave empty; any other file
+    is kept.
     """
     logging.basicConfig(level=(logging.DEBUG if verbose else logging.INFO))
     language = _check_language(parse_cli_variables(variable_pairs).get(LANGUAGE_VARIABLE))
@@ -587,6 +727,22 @@ def clean(project_dir, verbose, variable_pairs, output_dir, dry_run):
                                  param_hint="--output-dir")
 
     removed_count = 0
+
+    # Email folders only contain generated files, whatever their type (RST files, copied attachments)
+    email_roots = [output_root_dir.joinpath(EMAILS_FOLDER)]
+    if not language and not output_dir:
+        email_roots += sorted(output_root_dir.glob("*/" + EMAILS_FOLDER))  # Those of each language
+    for email_root in email_roots:
+        if not email_root.is_dir():
+            continue
+        for generated_file in sorted(email_root.rglob("*")):
+            if not generated_file.is_file() or generated_file.suffix.lower() == ".pdf":
+                continue  # PDF files are removed below, with those of the whole output folder
+            logging.info("%s %s", "Would remove" if dry_run else "Removing", generated_file)
+            if not dry_run:
+                generated_file.unlink()
+            removed_count += 1
+
     for root_dir, pattern in [(output_root_dir, GENERATED_OUTPUT_FILE_PATTERN),
                               (build_root_dir, GENERATED_BUILD_FILE_PATTERN)]:
         if not root_dir.is_dir():
