@@ -257,9 +257,24 @@ def render_with_jinja_and_fact_tags(content=None, filename=None, *, jinja_env, j
 ###################################
 
 
+# LibreOffice PDF export filter of each supported game document format
+PDF_EXPORT_FILTERS = {".odt": "writer_pdf_Export", ".fodt": "writer_pdf_Export",
+                      ".odp": "impress_pdf_Export", ".fodp": "impress_pdf_Export",
+                      ".odg": "draw_pdf_Export", ".fodg": "draw_pdf_Export"}
+
+
+def get_pdf_export_filter(document_file):
+    """Return the LibreOffice PDF export filter of a game document, or raise if its format is not supported."""
+    extension = os.path.splitext(str(document_file))[1].lower()
+    if extension not in PDF_EXPORT_FILTERS:
+        raise StorygenConfigError("Unsupported game document %s, expected one of these formats: %s"
+                                  % (document_file, ", ".join(sorted(PDF_EXPORT_FILTERS))))
+    return PDF_EXPORT_FILTERS[extension]
+
+
 def extract_text_from_odt_file(clues_file):
     """
-    Extract texts and comments from LibreOffice ODT file.
+    Extract texts and comments from LibreOffice ODT file (or ODP presentation, or ODG drawing).
     """
     from . import odt2txt
     odt = odt2txt.OpenDocumentTextFile(clues_file)
@@ -402,7 +417,8 @@ def _prune_page_resources(page, reader):
 
 def _export_odt_to_pdf(soffice, input_filename, output_filename):
     """
-    Export a whole ODT document to PDF with LibreOffice, WITHOUT its comments (gamemaster annotations).
+    Export a whole ODT document (or ODP presentation, or ODG drawing) to PDF with LibreOffice,
+    WITHOUT its comments (gamemaster annotations).
 
     A private LibreOffice profile is used, so that the job is not handed over to an already running LibreOffice.
     """
@@ -412,8 +428,8 @@ def _export_odt_to_pdf(soffice, input_filename, output_filename):
         os.makedirs(profile_dir)
         os.makedirs(out_dir)
         # JSON filter options need LibreOffice >= 7.4
-        export_filter = ('pdf:writer_pdf_Export:{"ExportNotes":{"type":"boolean","value":"false"},'
-                         '"ExportNotesInMargin":{"type":"boolean","value":"false"}}')
+        export_filter = ('pdf:%s:{"ExportNotes":{"type":"boolean","value":"false"},'
+                         '"ExportNotesInMargin":{"type":"boolean","value":"false"}}' % get_pdf_export_filter(input_filename))
         cmd = [soffice, "-env:UserInstallation=%s" % Path(profile_dir).as_uri(), "--headless", "--norestore",
                "--nologo", "--convert-to", export_filter, "--outdir", out_dir, input_filename]
         logging.debug("Exporting ODT file with command: %s", cmd)

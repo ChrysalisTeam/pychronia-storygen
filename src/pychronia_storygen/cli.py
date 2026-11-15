@@ -18,7 +18,7 @@ from types import MappingProxyType
 from pychronia_storygen.document_formats import load_yaml_file, load_jinja_environment, load_rst_file, \
     render_with_jinja_and_fact_tags, convert_rst_content_to_pdf, render_with_jinja, generate_rst_and_pdf_files, \
     render_with_jinja_and_convert_to_pdf, extract_text_from_odt_file, split_odt_file_into_separate_documents, \
-    check_comment_sample, resolve_comment_sample, \
+    check_comment_sample, resolve_comment_sample, get_pdf_export_filter, \
     get_filename_language, expand_path_placeholders, LANGUAGE_VARIABLE, StorygenConfigError
 from pychronia_storygen.data_files import load_data_files, run_variables_hook
 from pychronia_storygen.inventory import analyze_and_normalize_game_items
@@ -187,6 +187,7 @@ def _generate_document_files(document_bundle_name, document_config, storygen_set
                              skip_document_splitting=False):
     logging.info("Processing generation of game document bundle '%s'" % document_bundle_name)
     document_source = expand_path_placeholders(document_config["document_source"], storygen_settings.path_variables)
+    get_pdf_export_filter(document_source)  # ODT, ODP or ODG only
     document_text = extract_text_from_odt_file(document_source)
     # Else the story tags of gamemaster comments would be silently missed
     check_comment_sample(document_text, resolve_comment_sample(document_config.get("comment_sample"), storygen_settings.language),

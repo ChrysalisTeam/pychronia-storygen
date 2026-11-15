@@ -283,10 +283,30 @@ class OpenDocumentTextFile :
             
         return buffer
 
+    def drawingToString (self, body) :
+        """ Converts a presentation or drawing (ODP, ODG) to a string: the paragraphs of all its shapes,
+        notes and comments, in document order. """
+        buffer = u""
+        for paragraph in body.getElementsByTagName("*") :
+            if paragraph.tagName not in ("text:p", "text:h") :
+                continue
+            parent = paragraph.parentNode
+            while parent is not None and getattr(parent, "tagName", None) not in ("text:p", "text:h") :
+                parent = parent.parentNode
+            if parent is not None :
+                continue  # nested paragraph (e.g. of a comment), already rendered with its container
+            text = self.paragraphToString(paragraph)
+            if text :
+                buffer += text + "\n\n"
+        return buffer
+
     def toString (self) :
         """ Converts the document to a string. """
         body = self.content.getElementsByTagName("office:body")[0]
-        text = self.content.getElementsByTagName("office:text")[0]
+        texts = self.content.getElementsByTagName("office:text")
+        if not texts :  # presentation or drawing
+            return self.drawingToString(body)
+        text = texts[0]
 
         buffer = u""
 

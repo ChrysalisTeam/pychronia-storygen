@@ -1,4 +1,5 @@
 import io
+from pathlib import Path
 
 import pytest
 from pypdf import PdfReader, PdfWriter
@@ -216,3 +217,121 @@ def test_split_with_real_libreoffice(tmp_path):
     with pytest.raises(RuntimeError, match="declare 2 pages, but .* has 3 pages"):
         split_odt_file_into_separate_documents(source, [["first", 2]], out)
     assert [p.name for p in out.iterdir()] == ["third.pdf"]  # first.pdf removed, unlisted one kept
+
+
+@pytest.mark.parametrize("filename, expected", [("a/doc.odt", "writer_pdf_Export"), ("doc.FODT", "writer_pdf_Export"),
+                                                ("map_en.odp", "impress_pdf_Export"), ("doc.fodp", "impress_pdf_Export"),
+                                                ("plan.odg", "draw_pdf_Export"), ("plan.fodg", "draw_pdf_Export")])
+def test_get_pdf_export_filter(filename, expected):
+    assert document_formats.get_pdf_export_filter(filename) == expected
+
+
+@pytest.mark.parametrize("filename", ["doc.docx", "doc.pdf", "doc"])
+def test_get_pdf_export_filter_rejects_other_formats(filename):
+    with pytest.raises(StorygenConfigError, match="Unsupported game document"):
+        document_formats.get_pdf_export_filter(filename)
+
+
+def test_export_uses_the_filter_of_the_document_format(tmp_path, monkeypatch):
+    commands = []
+
+    def fake_run(cmd, **kwargs):
+        commands.append(cmd)
+        out_dir = Path(cmd[cmd.index("--outdir") + 1])
+        (out_dir / "map.pdf").write_bytes(b"%PDF-fake")
+
+    monkeypatch.setattr(document_formats.subprocess, "run", fake_run)
+    document_formats._export_odt_to_pdf("soffice", str(tmp_path / "map.odp"), str(tmp_path / "map.pdf"))
+    export_filter = commands[0][commands[0].index("--convert-to") + 1]
+    assert export_filter.startswith('pdf:impress_pdf_Export:{"ExportNotes"')
+    assert (tmp_path / "map.pdf").read_bytes() == b"%PDF-fake"
+
+
+ODP_CONTENT = """<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
+  xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"
+  xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0"
+  xmlns:dc="http://purl.org/dc/elements/1.1/" office:version="1.2">
+ <office:font-face-decls/>
+ <office:automatic-styles>
+  <style:style style:name="T1" style:family="text"><style:text-properties/></style:style>
+ </office:automatic-styles>
+ <office:body><office:presentation>
+  <draw:page draw:name="page1">
+   <draw:custom-shape svg:width="2cm" svg:height="1cm"><text:p><text:span text:style-name="T1">Throne room</text:span></text:p></draw:custom-shape>
+   <draw:frame svg:width="2cm" svg:height="1cm"><draw:text-box><text:p>Guardroom</text:p><text:p/></draw:text-box></draw:frame>
+   <office:annotation><dc:creator>GM</dc:creator><text:p>{% xfact "the map shows the keep" %}</text:p></office:annotation>
+  </draw:page>
+  <draw:page draw:name="page2">
+   <draw:custom-shape svg:width="2cm" svg:height="1cm"><text:p>Ice house</text:p></draw:custom-shape>
+  </draw:page>
+ </office:presentation></office:body>
+</office:document-content>
+"""
+
+ODP_STYLES = """<?xml version="1.0" encoding="UTF-8"?>
+<office:document-styles xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" office:version="1.2">
+ <office:font-face-decls/><office:styles/>
+</office:document-styles>
+"""
+
+
+def test_extract_text_from_odp_file(tmp_path):
+    import zipfile
+    source = tmp_path / "map_en.odp"
+    with zipfile.ZipFile(source, "w") as odp:
+        odp.writestr("mimetype", "application/vnd.oasis.opendocument.presentation")
+        odp.writestr("content.xml", ODP_CONTENT)
+        odp.writestr("styles.xml", ODP_STYLES)
+    text = document_formats.extract_text_from_odt_file(str(source))
+    assert [line.strip() for line in text.split("\n") if line.strip()] == [
+        "Throne room", "Guardroom", '{% xfact "the map shows the keep" %}', "Ice house"]
+
+
+def test_documents_cli_rejects_unsupported_formats(storygen):
+    storygen.write("configuration.yaml", """
+        document_generation:
+          clues:
+            document_source: clues.docx
+        """)
+    storygen.write("clues.docx", "not an opendocument")
+    result = storygen.run("--skip-document-splitting", expect_ok=False)
+    assert result.exit_code != 0
+    assert "Unsupported game document" in result.output + str(result.exception)
+
+
+SOFFICE_FODP = """<?xml version="1.0" encoding="UTF-8"?>
+<office:document xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"
+  xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0"
+  xmlns:dc="http://purl.org/dc/elements/1.1/"
+  office:version="1.2" office:mimetype="application/vnd.oasis.opendocument.presentation">
+ <office:body><office:presentation>
+  <draw:page draw:name="page1">
+   <draw:frame svg:x="2cm" svg:y="2cm" svg:width="10cm" svg:height="2cm"><draw:text-box><text:p>Slide one text</text:p></draw:text-box></draw:frame>
+   <office:annotation svg:x="1cm" svg:y="1cm" svg:width="5cm" svg:height="2cm"><dc:creator>GM</dc:creator><text:p>SECRET gamemaster comment</text:p></office:annotation>
+  </draw:page>
+  <draw:page draw:name="page2">
+   <draw:frame svg:x="2cm" svg:y="2cm" svg:width="10cm" svg:height="2cm"><draw:text-box><text:p>Slide two text</text:p></draw:text-box></draw:frame>
+  </draw:page>
+ </office:presentation></office:body>
+</office:document>
+"""
+
+
+def test_split_presentation_with_real_libreoffice(tmp_path):
+    try:
+        document_formats._find_soffice()
+    except RuntimeError:
+        pytest.skip("LibreOffice is not installed")
+    source = tmp_path / "map.fodp"
+    source.write_text(SOFFICE_FODP, encoding="utf8")
+    out = tmp_path / "out"
+    split_odt_file_into_separate_documents(source, [["one", 1, "Slide one"], ["two", 1, "Slide two"]], out)
+    assert sorted(p.name for p in out.iterdir()) == ["one.pdf", "two.pdf"]
+    assert _page_texts(out / "one.pdf") == ["Slide one text"]  # the comment was not exported
+    assert _page_texts(out / "two.pdf") == ["Slide two text"]

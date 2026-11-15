@@ -13,7 +13,7 @@ Then launch it with the "pychronia_storygen" command (or equivalently "python -m
     pychronia_storygen example_project
 
 Generated RST files go into the "_build/" subfolder of the project, and PDF files into its "_output/" subfolder.
-LibreOffice must be installed to split ODT game documents into separate PDF files.
+LibreOffice must be installed to split game documents (ODT, ODP or ODG) into separate PDF files.
 
 The ``--variable NAME=VALUE`` option (or ``-V``, repeatable) sets a root variable of the project, overriding
 the "variables" entry of its configuration (see "Root variables" below)::
@@ -188,11 +188,13 @@ PDF files are always generated compressed (rst2pdf ``--compressed`` option, what
 rst2pdf errors (missing images, unknown targets...) are detected in its output even when it exits with code 0:
 the generation fails, and no stale PDF is left behind.
 
-ODT game documents
-------------------
+Game documents (ODT, ODP, ODG)
+------------------------------
 
-A "document_generation" bundle exports an ODT file (``document_source``, which may contain "{lang}") to PDF with
-LibreOffice, then splits it into one PDF per document, in a folder named after the ODT file::
+A "document_generation" bundle exports an OpenDocument file (``document_source``, which may contain "{lang}") to PDF
+with LibreOffice, then splits it into one PDF per document, in a folder named after the source file. The source may be
+a text document (".odt"), a presentation (".odp", e.g. a map drawn in Impress, one page per slide) or a drawing
+(".odg"), or their flat XML variants (".fodt", ".fodp", ".fodg"); other formats are rejected::
 
     document_generation:
       game_clues:
@@ -207,21 +209,21 @@ LibreOffice, then splits it into one PDF per document, in a folder named after t
           - [oracle_vision, 3, {fr: "Vision", en: "Vision of"}]  # per-language text ("lang" variable)
           - [map, 1, null]                                # null text: the first page must have no text
 
-The ODT file is exported once (without its gamemaster comments), then each part is extracted with pypdf, keeping
+The source file is exported once (without its gamemaster comments), then each part is extracted with pypdf, keeping
 only the images and fonts it uses. The generation fails if the exported file has comment annotations, if the declared
 page counts don't add up to the number of pages, or if the first page of a part doesn't contain its text snippet
 (compared ignoring case and whitespace). Entries with only a name and a page count are not checked on their first page,
 and a language missing from a per-language mapping disables the check for that language.
 The PDFs of the parts are removed before each export.
 
-"comment_sample" (optional) is a text which the ODT text, gamemaster comments included, must contain, else the
+"comment_sample" (optional) is a text which the document text, gamemaster comments included, must contain, else the
 generation fails: it proves that the story tags written in comments were extracted.
 
 Command line
 ------------
 
 Storygen exits with a non-zero code if the coherence analysis finds serious errors, after all files were generated.
-With ``--skip-document-splitting``, ODT game documents are still parsed for story tags, but not split into PDFs
+With ``--skip-document-splitting``, game documents are still parsed for story tags, but not split into PDFs
 (LibreOffice is then not needed).
 
 Tests are run with "pytest" (a dev dependency).
