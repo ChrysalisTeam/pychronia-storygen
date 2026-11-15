@@ -35,6 +35,24 @@ generated RST files then go into its "_build/" subfolder::
 
     pychronia_storygen my_project --variable lang=en --output-dir ../dist/my_project_en
 
+The ``--only PATTERN`` and ``--skip PATTERN`` options (both repeatable) restrict the generated files to some items
+of the project, selected by glob patterns (where "*" also matches "/") on their IDs; ``--skip`` wins over ``--only``.
+``--list`` prints the IDs of all items, marking those selected, without rendering or generating anything::
+
+    pychronia_storygen my_project --list
+    pychronia_storygen my_project --only "sheets/players/*" --skip "*/cheat"
+    pychronia_storygen my_project --only "*alice*" --only "summaries/*"
+
+Item IDs are "sheets/<group>/.../<sheet>/full" (or "/cheat"), "documents/<bundle>",
+"inventories/<inventory>/per_section" (or "/per_crate") and "summaries/facts" (or "/symbols", "/items").
+Unselected sheets and game documents are still rendered and parsed (but not written nor converted to PDF), so the
+coherence analysis remains complete, and its errors still give a non-zero exit code. A pattern which matches no item
+is an error.
+
+The ``--no-pdf`` option only writes the intermediate RST files, without running rst2pdf, and doesn't split game
+documents (it implies ``--skip-document-splitting``): it is a quick check of templates and of scenario coherence,
+which can be combined with ``--only``/``--skip``, but rst2pdf errors (e.g. missing images) are then not detected.
+
 The command above is a shortcut for the default "build" command (``pychronia_storygen build my_project ...``).
 The "clean" command removes the generated files: the PDF files of the output folder, and the RST (".txt")
 files of the build folder, along with the subfolders they leave empty; any other file is kept.

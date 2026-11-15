@@ -623,6 +623,9 @@ def generate_rst_and_pdf_files(rst_content, relative_path, storygen_settings):
     write_rst_file(rst_file, data=rst_content, language=storygen_settings.language)
     if storygen_settings.dynamic_settings.get("unlink_unknown_rst_targets", False):
         unlink_unknown_rst_targets(rst_file)  # On the final RST, after jinja rendering
+    if not storygen_settings.generate_pdf:
+        logging.debug("Skipping the conversion of '%s' to PDF", rst_file)
+        return
     convert_rst_file_to_pdf(rst_file, pdf_file,
                             conf_file=_get_setting("rst2pdf_conf_file", "", is_path=True),
                             extra_args=_get_setting("rst2pdf_extra_args", ""),

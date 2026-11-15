@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """A pythonic like make file """
 import dataclasses
+import fnmatch
 import logging
 import os
 import re
@@ -34,6 +35,36 @@ def ___frozenmap(map, **kwargs):  # FIXME REMOVE
 
 
 @dataclass
+class ItemSelection:
+    """
+    Selection of the items (sheets, document bundles, inventory sheets, summaries) whose files are generated,
+    by glob patterns (see fnmatch, "*" also matches "/") on their IDs, like "sheets/players/alice/cheat".
+
+    Unselected sheets and documents are still rendered/parsed, so that the coherence analysis sees all story tags.
+    In listing mode, nothing is rendered nor generated, items IDs are just collected.
+    """
+    only_patterns: tuple = ()  # If not empty, only the items matching one of them are selected
+    skip_patterns: tuple = ()  # Items matching one of them are unselected, even if they match only_patterns
+    listing: bool = False
+    items: list = dataclasses.field(default_factory=list)  # (item_id, is_selected) of all items met, in processing order
+    matched_patterns: set = dataclasses.field(default_factory=set)
+
+    def is_selected(self, item_id):
+        """Register this item, and return whether its files must be generated (never, in listing mode)."""
+        only_matches = {pattern for pattern in self.only_patterns if fnmatch.fnmatchcase(item_id, pattern)}
+        skip_matches = {pattern for pattern in self.skip_patterns if fnmatch.fnmatchcase(item_id, pattern)}
+        self.matched_patterns.update(only_matches, skip_matches)
+        selected = (not self.only_patterns or bool(only_matches)) and not skip_matches
+        self.items.append((item_id, selected))
+        if not selected and not self.listing:
+            logging.debug("Skipping the generation of unselected item '%s'", item_id)
+        return selected and not self.listing
+
+    def get_unmatched_patterns(self):
+        return [pattern for pattern in self.only_patterns + self.skip_patterns if pattern not in self.matched_patterns]
+
+
+@dataclass
 class StorygenSettings:
     """Settings for the whole processing pipeline"""
     project_root_dir: str
@@ -44,6 +75,8 @@ class StorygenSettings:
     dynamic_settings: ChainMap
     language: str = None  # Language of the generated documents (eg. "fr"), if the project is translated ("lang" variable)
     path_variables: object = dataclasses.field(default_factory=dict)  # Root variables, usable in "{name}" placeholders of configuration paths
+    selection: ItemSelection = dataclasses.field(default_factory=ItemSelection)  # Shared by derived settings
+    generate_pdf: bool = True  # If False, only the intermediate RST files are written, rst2pdf is not run
 
     def derive(self, new_config_level, default_variables=None, **extra_dynamic_variables):
         """
@@ -97,6 +130,12 @@ def _recursively_generate_group_sheets(data_tree: dict, group_breadcrumb: tuple,
             if not sheet_parts:
                 continue
 
+            selection = player_storygen_settings.selection
+            item_id = "/".join(("sheets",) + group_breadcrumb + (sheet_name, "cheat" if is_cheat_sheet else "full"))
+            is_selected = selection.is_selected(item_id)
+            if selection.listing:
+                continue
+
             _sheet_name_tpl = "%s_cheat_sheet" if is_cheat_sheet else "%s_full_sheet"
             relative_filepath_base = relative_folders.joinpath(_sheet_name_tpl % sheet_name)
 
@@ -124,6 +163,9 @@ def _recursively_generate_group_sheets(data_tree: dict, group_breadcrumb: tuple,
                     jinja_env=player_storygen_settings.jinja_env,
                     jinja_context=jinja_context)
                 full_rst_content += "\n\n" + rst_content
+
+            if not is_selected:
+                continue  # Rendered anyway, for the story tags of the coherence analysis
 
             logging.debug("Writing RST and PDF files with filename base '%s'", relative_filepath_base)
             generate_rst_and_pdf_files(
@@ -157,9 +199,6 @@ def _generate_inventory_files(inventory_name, inventory_config, storygen_setting
     if not inventory_data_path:
         logging.info("No 'inventory_data' for game inventory '%s', skipping it" % inventory_name)
         return
-    inventory_data = load_yaml_file(Path(inventory_data_path))
-    game_items_per_section, game_items_per_crate = analyze_and_normalize_game_items(
-        inventory_data, important_marker="IMPORTANT")
 
     inventory_per_section_template_name = _get_path("inventory_per_section_template")
     inventory_per_section_destination = _get_path("inventory_per_section_destination")
@@ -167,7 +206,20 @@ def _generate_inventory_files(inventory_name, inventory_config, storygen_setting
     inventory_per_crate_template_name = _get_path("inventory_per_crate_template")
     inventory_per_crate_destination = _get_path("inventory_per_crate_destination")
 
-    if inventory_per_section_template_name and inventory_per_section_destination:
+    # Inventory sheets don't register story tags, so unselected ones are not even rendered
+    selection = storygen_settings.selection
+    is_per_section_selected = bool(inventory_per_section_template_name and inventory_per_section_destination
+                                   and selection.is_selected("inventories/%s/per_section" % inventory_name))
+    is_per_crate_selected = bool(inventory_per_crate_template_name and inventory_per_crate_destination
+                                 and selection.is_selected("inventories/%s/per_crate" % inventory_name))
+    if not (is_per_section_selected or is_per_crate_selected):
+        return
+
+    inventory_data = load_yaml_file(Path(inventory_data_path))
+    game_items_per_section, game_items_per_crate = analyze_and_normalize_game_items(
+        inventory_data, important_marker="IMPORTANT")
+
+    if is_per_section_selected:
         logging.info("Processing per-section sheet for game inventory '%s'" % inventory_name)
         jinja_context = dict(items_per_section=game_items_per_section, **storygen_settings.dynamic_variables)
         render_with_jinja_and_convert_to_pdf(inventory_per_section_template_name,
@@ -175,7 +227,7 @@ def _generate_inventory_files(inventory_name, inventory_config, storygen_setting
                                              jinja_context=jinja_context,
                                              storygen_settings=storygen_settings)
 
-    if inventory_per_crate_template_name and inventory_per_crate_destination:
+    if is_per_crate_selected:
         logging.info("Processing per-crate sheet for game inventory '%s'" % inventory_name)
         jinja_context = dict(items_per_crate=game_items_per_crate, **storygen_settings.dynamic_variables)
         render_with_jinja_and_convert_to_pdf(inventory_per_crate_template_name,
@@ -185,6 +237,11 @@ def _generate_inventory_files(inventory_name, inventory_config, storygen_setting
 
 def _generate_document_files(document_bundle_name, document_config, storygen_settings: StorygenSettings,
                              skip_document_splitting=False):
+    selection = storygen_settings.selection
+    is_selected = selection.is_selected("documents/%s" % document_bundle_name)
+    if selection.listing:
+        return
+
     logging.info("Processing generation of game document bundle '%s'" % document_bundle_name)
     document_source = expand_path_placeholders(document_config["document_source"], storygen_settings.path_variables)
     get_pdf_export_filter(document_source)  # ODT, ODP or ODG only
@@ -199,6 +256,8 @@ def _generate_document_files(document_bundle_name, document_config, storygen_set
         jinja_env=storygen_settings.jinja_env,
         jinja_context=dict(document_bundle_name=document_bundle_name))
 
+    if not is_selected:
+        return  # Parsed anyway, for the story tags of the coherence analysis
     if skip_document_splitting:
         logging.info("Skipping the splitting of document bundle '%s' into PDF files" % document_bundle_name)
         return
@@ -224,49 +283,41 @@ def _generate_summary_files(summary_config, storygen_settings: StorygenSettings)
     def _get_path(key):
         return expand_path_placeholders(summary_config.get(key), storygen_settings.path_variables)
 
-    # The coherence analysis is always done, even if the matching summary template is not configured
     jinja_env = storygen_settings.jinja_env
-    has_serious_errors1, error_messages1 = detect_game_fact_errors(jinja_env.facts_registry)
-    has_serious_errors2, error_messages2 = detect_game_symbol_errors(jinja_env.symbols_registry)
-    has_serious_errors3, error_messages3 = detect_game_item_errors(jinja_env.items_registry)
+    selection = storygen_settings.selection
+    summaries = [  # (summary kind, registry, error detector)
+        ("facts", jinja_env.facts_registry, detect_game_fact_errors),
+        ("symbols", jinja_env.symbols_registry, detect_game_symbol_errors),
+        ("items", jinja_env.items_registry, detect_game_item_errors),
+    ]
 
-    if _get_path("game_facts_template") and _get_path("game_facts_destination"):
-        logging.info("Processing special sheet for game facts")
-        jinja_context = dict(facts_registry=jinja_env.facts_registry,
-                             has_serious_errors=has_serious_errors1,
-                             error_messages=error_messages1,
-                             **storygen_settings.dynamic_variables)
-        render_with_jinja_and_convert_to_pdf(_get_path("game_facts_template"),
-                                             relative_path=Path(_get_path("game_facts_destination")),
-                                             jinja_context=jinja_context,
-                                             storygen_settings=storygen_settings)
+    has_serious_errors = False
+    all_error_messages = []
+    for kind, registry, detect_errors in summaries:
+        template_name = _get_path("game_%s_template" % kind)
+        destination = _get_path("game_%s_destination" % kind)
+        is_selected = bool(template_name and destination and selection.is_selected("summaries/%s" % kind))
+        if selection.listing:
+            continue
+        # The coherence analysis is always done, even if the matching summary sheet is not configured or selected
+        kind_has_serious_errors, error_messages = detect_errors(registry)
+        has_serious_errors = has_serious_errors or kind_has_serious_errors
+        all_error_messages += error_messages
+        if is_selected:
+            logging.info("Processing special sheet for game %s", kind)
+            jinja_context = {"%s_registry" % kind: registry,
+                             "has_serious_errors": kind_has_serious_errors,
+                             "error_messages": error_messages,
+                             **storygen_settings.dynamic_variables}
+            render_with_jinja_and_convert_to_pdf(template_name,
+                                                 relative_path=Path(destination),
+                                                 jinja_context=jinja_context,
+                                                 storygen_settings=storygen_settings)
 
-    if _get_path("game_symbols_template") and _get_path("game_symbols_destination"):
-        logging.info("Processing special sheet for game symbols")
-        jinja_context = dict(symbols_registry=jinja_env.symbols_registry,
-                             has_serious_errors=has_serious_errors2,
-                             error_messages=error_messages2,
-                             **storygen_settings.dynamic_variables)
-        render_with_jinja_and_convert_to_pdf(_get_path("game_symbols_template"),
-                                             relative_path=Path(_get_path("game_symbols_destination")),
-                                             jinja_context=jinja_context,
-                                             storygen_settings=storygen_settings)
-
-    if _get_path("game_items_template") and _get_path("game_items_destination"):
-        logging.info("Processing special sheet for game items")
-        jinja_context = dict(items_registry=jinja_env.items_registry,
-                             has_serious_errors=has_serious_errors3,
-                             error_messages=error_messages3,
-                             **storygen_settings.dynamic_variables)
-        render_with_jinja_and_convert_to_pdf(_get_path("game_items_template"),
-                                             relative_path=Path(_get_path("game_items_destination")),
-                                             jinja_context=jinja_context,
-                                             storygen_settings=storygen_settings)
-
+    if selection.listing:
+        return False
     logging.info("Processing final results of scenario coherence analysis")
-    return _handle_analysis_results(
-            has_serious_errors=any([has_serious_errors1, has_serious_errors2, has_serious_errors3]),
-            error_messages=error_messages1 + error_messages2 + error_messages3
+    return _handle_analysis_results(has_serious_errors=has_serious_errors, error_messages=all_error_messages
     )
 
 
@@ -349,8 +400,6 @@ def _get_output_and_build_root_dirs(language, output_dir):
 @cli.command()
 @click.argument('project_dir', type=click.Path(exists=True, file_okay=False))
 @click.option('--verbose', '-v', is_flag=True, help="Print more output.")
-@click.option("-t", "--type", "selected_asset_types", type=click.Choice(['sheets', 'documents', 'inventories'], case_sensitive=False),
-                            multiple=True, help="Select the types of assets to generate")
 @click.option("-V", "--variable", "variable_pairs", multiple=True, metavar="NAME=VALUE",
               help=VARIABLE_OPTION_HELP + " The 'lang' variable (eg. 'lang=fr') is the language of a translated "
                    "project: its 'configuration_<lang>.yaml' file is used if it exists (else 'configuration.yaml'), "
@@ -363,19 +412,36 @@ def _get_output_and_build_root_dirs(language, output_dir):
 @click.option("--skip-document-splitting", "skip_document_splitting", is_flag=True,
               help="Parse ODT game documents for story tags, but don't split them into PDF files "
                    "(LibreOffice is then not needed).")
-def build(project_dir, verbose, selected_asset_types, variable_pairs, output_dir, skip_document_splitting):
-    """Generate the files of the project folder PROJECT_DIR (default command)."""
+@click.option("--only", "only_patterns", multiple=True, metavar="PATTERN",
+              help="Only generate the files of the items whose ID matches this glob pattern (can be repeated), "
+                   "eg. 'sheets/players/*', '*alice*' or '*/cheat'; see --list for the IDs. Unselected sheets and "
+                   "documents are still rendered and parsed, so the coherence analysis stays complete.")
+@click.option("--skip", "skip_patterns", multiple=True, metavar="PATTERN",
+              help="Don't generate the files of the items whose ID matches this glob pattern (can be repeated), "
+                   "even if they match an --only pattern.")
+@click.option("--list", "listing", is_flag=True,
+              help="Only print the IDs of the items of the project, marking those selected by --only/--skip, "
+                   "without rendering or generating anything.")
+@click.option("--no-pdf", "no_pdf", is_flag=True,
+              help="Only write the intermediate RST files, without converting them to PDF files, and don't split "
+                   "game documents (implies --skip-document-splitting): a quick check of templates and of scenario "
+                   "coherence, but rst2pdf errors (eg. missing images) are then not detected.")
+def build(project_dir, verbose, variable_pairs, output_dir, skip_document_splitting, only_patterns, skip_patterns,
+          listing, no_pdf):
+    """Generate the files of the project folder PROJECT_DIR (default command).
+
+    Items whose files can be selected with --only/--skip have IDs like "sheets/<group>/.../<sheet>/full" (or
+    "/cheat"), "documents/<bundle>", "inventories/<inventory>/per_section" (or "/per_crate") and
+    "summaries/facts" (or "/symbols", "/items").
+    """
     project_dir = os.path.abspath(project_dir).rstrip("\\/") + os.path.sep
     if output_dir:
         output_dir = os.path.abspath(output_dir)  # Resolved BEFORE we chdir into the project dir
 
-    def _is_asset_type_enabled(_type):
-        assert _type.lower() == _type, _type
-        if _type == "summaries":
-            return (not selected_asset_types)  # We only generate summaries if ALL other assets have been generated too!
-        return (not selected_asset_types) or (_type in selected_asset_types)
+    selection = ItemSelection(only_patterns=tuple(only_patterns), skip_patterns=tuple(skip_patterns), listing=listing)
+    skip_document_splitting = skip_document_splitting or no_pdf  # Splitting produces PDF files with LibreOffice
 
-    logging.basicConfig(level=(logging.DEBUG if verbose else logging.INFO))
+    logging.basicConfig(level=(logging.DEBUG if verbose else (logging.WARNING if listing else logging.INFO)))
 
     cli_variables = parse_cli_variables(variable_pairs)
     cli_language = _check_language(cli_variables.get(LANGUAGE_VARIABLE))
@@ -401,8 +467,9 @@ def build(project_dir, verbose, selected_asset_types, variable_pairs, output_dir
     if output_dir:
         if output_root_dir.is_relative_to(project_dir):  # Excluded dirs must be relative to the templates root
             excluded_template_dirs.append(output_root_dir.relative_to(project_dir))
-    os.makedirs(output_root_dir, exist_ok=True)
-    os.makedirs(build_root_dir, exist_ok=True)
+    if not listing:
+        os.makedirs(output_root_dir, exist_ok=True)
+        os.makedirs(build_root_dir, exist_ok=True)
 
     # Extra template directories are searched AFTER the project dir, and are also scanned for macros
     template_dirs = [expand_path_placeholders(template_dir, path_variables)
@@ -433,41 +500,49 @@ def build(project_dir, verbose, selected_asset_types, variable_pairs, output_dir
         dynamic_settings=ChainMap(project_data_tree.get("settings") or {}),
         language=language,
         path_variables=MappingProxyType(path_variables),
+        selection=selection,
+        generate_pdf=not no_pdf,
     )
 
-    if _is_asset_type_enabled("sheets"):
-        # GENERATE FULL SHEETS AND CHEAT SHEETS
-        sheet_generation_tree = project_data_tree.get("sheet_generation")
-        if sheet_generation_tree:
-            _recursively_generate_group_sheets(sheet_generation_tree,
-                                               group_breadcrumb=(),
-                                               storygen_settings=storygen_settings)
+    # GENERATE FULL SHEETS AND CHEAT SHEETS
+    sheet_generation_tree = project_data_tree.get("sheet_generation")
+    if sheet_generation_tree:
+        _recursively_generate_group_sheets(sheet_generation_tree,
+                                           group_breadcrumb=(),
+                                           storygen_settings=storygen_settings)
 
-    if _is_asset_type_enabled("documents"):
-        # GENERATE GAME DOCUMENTS
-        # No drivation of storygen_settings here, since jinja/rst2pdf is not used
-        document_generation_tree = project_data_tree.get("document_generation")
-        if document_generation_tree:
-            for document_bundle_name, document_config in document_generation_tree.items():
-                _generate_document_files(document_bundle_name, document_config=document_config,
-                                         storygen_settings=storygen_settings,
-                                         skip_document_splitting=skip_document_splitting)
+    # GENERATE GAME DOCUMENTS
+    # No derivation of storygen_settings here, since jinja/rst2pdf is not used
+    document_generation_tree = project_data_tree.get("document_generation")
+    if document_generation_tree:
+        for document_bundle_name, document_config in document_generation_tree.items():
+            _generate_document_files(document_bundle_name, document_config=document_config,
+                                     storygen_settings=storygen_settings,
+                                     skip_document_splitting=skip_document_splitting)
 
-    if _is_asset_type_enabled("inventories"):
-        # GENERATE INVENTORIES
-        inventory_generation_tree = project_data_tree.get("inventory_generation")
-        if inventory_generation_tree:
-            for inventory_name, inventory_config in inventory_generation_tree.items():
-                _generate_inventory_files(inventory_name,
-                                          inventory_config=inventory_config,
-                                          storygen_settings=storygen_settings)
+    # GENERATE INVENTORIES
+    inventory_generation_tree = project_data_tree.get("inventory_generation")
+    if inventory_generation_tree:
+        for inventory_name, inventory_config in inventory_generation_tree.items():
+            _generate_inventory_files(inventory_name,
+                                      inventory_config=inventory_config,
+                                      storygen_settings=storygen_settings)
 
-    if _is_asset_type_enabled("summaries"):
-        # GENERATE SUMMARIES
-        summary_config = project_data_tree.get("summary_generation") or {}
-        has_serious_errors = _generate_summary_files(summary_config, storygen_settings=storygen_settings)
-        if has_serious_errors:
-            raise click.exceptions.Exit(1)  # After all files were generated
+    # GENERATE SUMMARIES, and analyse scenario coherence (after all other items, which register story tags)
+    summary_config = project_data_tree.get("summary_generation") or {}
+    has_serious_errors = _generate_summary_files(summary_config, storygen_settings=storygen_settings)
+
+    if listing:
+        for item_id, is_selected in selection.items:
+            click.echo("%s %s" % ("[x]" if is_selected else "[ ]", item_id))
+
+    unmatched_patterns = selection.get_unmatched_patterns()
+    if unmatched_patterns:  # Probably typos, which must not go unnoticed
+        raise click.BadParameter("Pattern(s) %s match no item ID (see --list)" % ", ".join(map(repr, unmatched_patterns)),
+                                 param_hint="--only/--skip")
+
+    if has_serious_errors:
+        raise click.exceptions.Exit(1)  # After all files were generated
 
 
 # Patterns of the files generated by the "build" command: PDF documents, and intermediate RST files
