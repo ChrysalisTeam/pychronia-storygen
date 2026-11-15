@@ -37,26 +37,57 @@ def get_filename_language(filename):
     return match.group(1) if match else None
 
 
-LANG_PLACEHOLDER = "{lang}"
+LANGUAGE_VARIABLE = "lang"  # Root variable holding the language code of the generated documents
+
+PATH_PLACEHOLDER_REGEX = re.compile(r"\{(\w+)\}")  # Eg. "{lang}"
 
 
 class StorygenConfigError(click.ClickException):
     """Invalid project configuration, reported to the user without traceback."""
 
 
-def expand_lang_placeholder(path, language):
+def expand_path_placeholders(path, variables):
     """
-    Replace the "{lang}" placeholder of a path-valued configuration entry by the language code.
+    Replace the "{name}" placeholders of a path-valued configuration entry by the values of the root variables
+    (those of the "variables" entry of the configuration, overridden by the --variable options), eg. "{lang}".
 
-    This is the single place handling that placeholder; using it without a language (--lang) is an error.
+    This is the single place handling these placeholders; a placeholder without matching variable is an error.
     Falsy values and non-strings are returned as-is.
     """
-    if not path or not isinstance(path, str) or LANG_PLACEHOLDER not in path:
+    if not path or not isinstance(path, str) or "{" not in path:
         return path
-    if not language:
-        raise StorygenConfigError("Configuration entry %r uses the %s placeholder, but no language was given (use --lang)"
-                                  % (path, LANG_PLACEHOLDER))
-    return path.replace(LANG_PLACEHOLDER, language)
+
+    def _replace(matchobj):
+        name = matchobj.group(1)
+        value = (variables or {}).get(name)
+        if value is None:
+            raise StorygenConfigError(
+                "Configuration entry %r uses the {%s} placeholder, but no root variable %r is defined (add it to the "
+                "'variables' of the configuration, or use --variable %s=<value>)" % (path, name, name, name))
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        if not isinstance(value, (str, int)):
+            raise StorygenConfigError("Configuration entry %r uses the {%s} placeholder, but the root variable %r is "
+                                      "not a string or a number: %r" % (path, name, name, value))
+        return str(value)
+
+    return PATH_PLACEHOLDER_REGEX.sub(_replace, path)
+
+
+_settings_jinja_env = jinja2.Environment(undefined=jinja2.StrictUndefined)
+
+
+def render_setting(value, variables, setting_name):
+    """
+    Render a string setting containing jinja2 markup (eg. "--stylesheets={{ 'dark' if decorations else 'plain' }}")
+    with the root variables. Other values are returned as-is.
+    """
+    if not isinstance(value, str) or ("{{" not in value and "{%" not in value):
+        return value
+    try:
+        return _settings_jinja_env.from_string(value).render(dict(variables or {}))
+    except jinja2.TemplateError as exc:
+        raise StorygenConfigError("Can't render setting %r (%r) with the root variables: %s" % (setting_name, value, exc))
 
 
 ###################################
@@ -566,17 +597,22 @@ def generate_rst_and_pdf_files(rst_content, relative_path, storygen_settings):
 
     pdf_file = storygen_settings.output_root_dir.joinpath(relative_path).with_suffix(".pdf")
 
+    path_variables = storygen_settings.path_variables
+
+    def _get_setting(name, default=None, is_path=False):
+        # String settings may contain jinja2 markup, and path ones "{name}" placeholders, both using root variables
+        value = render_setting(storygen_settings.dynamic_settings.get(name, default), path_variables, setting_name=name)
+        return expand_path_placeholders(value, path_variables) if is_path else value
+
     write_rst_file(rst_file, data=rst_content, language=storygen_settings.language)
     if storygen_settings.dynamic_settings.get("unlink_unknown_rst_targets", False):
         unlink_unknown_rst_targets(rst_file)  # On the final RST, after jinja rendering
     convert_rst_file_to_pdf(rst_file, pdf_file,
-                            conf_file=expand_lang_placeholder(storygen_settings.dynamic_settings.get("rst2pdf_conf_file", ""),
-                                                              storygen_settings.language),
-                            extra_args=storygen_settings.dynamic_settings.get("rst2pdf_extra_args", ""),
+                            conf_file=_get_setting("rst2pdf_conf_file", "", is_path=True),
+                            extra_args=_get_setting("rst2pdf_extra_args", ""),
                             language=storygen_settings.language,
                             smart_quotes=storygen_settings.dynamic_settings.get("rst2pdf_smart_quotes", DEFAULT_SMART_QUOTES),
-                            docutils_conf_file=expand_lang_placeholder(
-                                storygen_settings.dynamic_settings.get("docutils_conf_file"), storygen_settings.language))
+                            docutils_conf_file=_get_setting("docutils_conf_file", is_path=True))
 
 
 

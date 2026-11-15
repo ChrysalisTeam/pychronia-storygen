@@ -19,7 +19,7 @@ def _write_project(storygen, extra_config=""):
 
 def test_template_dirs_templates_and_macros(storygen):
     _write_project(storygen)
-    storygen.run("--lang", "en")
+    storygen.run("--variable", "lang=en")
     text = storygen.build_text("alice_full_sheet.txt", lang="en")
     assert "Hello Alice" in text
     assert "Shared from common" in text
@@ -28,7 +28,7 @@ def test_template_dirs_templates_and_macros(storygen):
 def test_project_dir_has_priority(storygen):
     _write_project(storygen)
     storygen.write("shared.rst", "Shared from project")
-    storygen.run("--lang", "en")
+    storygen.run("--variable", "lang=en")
     text = storygen.build_text("alice_full_sheet.txt", lang="en")
     assert "Shared from project" in text and "common" not in text
 

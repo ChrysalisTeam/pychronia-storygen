@@ -54,7 +54,7 @@ def test_clean_with_language_only_removes_files_of_this_language(tmp_path):
     project_dir = tmp_path / "project"
     files = _make_generated_tree(project_dir)
 
-    result = _clean(project_dir, "--lang", "en")
+    result = _clean(project_dir, "--variable", "lang=en")
     assert result.exit_code == 0, result.output
 
     assert not files["pdf_en"].exists()
@@ -110,7 +110,7 @@ def test_clean_without_generated_folders(tmp_path):
 def test_clean_rejects_bad_language(tmp_path):
     project_dir = tmp_path / "project"
     project_dir.mkdir()
-    result = _clean(project_dir, "--lang", "french")
+    result = _clean(project_dir, "--variable", "lang=french")
     assert result.exit_code != 0
 
 
@@ -122,14 +122,14 @@ def test_build_then_clean(storygen):
               full_sheet: [intro.rst]
     """)
     storygen.write("intro.rst", "Hello Alice")
-    storygen.run("--lang", "en")  # Default command, without "build"
+    storygen.run("--variable", "lang=en")  # Default command, without "build"
     assert list((storygen.project_dir / "_output").rglob("*.pdf"))
     assert list((storygen.project_dir / "_build").rglob("*.txt"))
 
-    storygen.run_command("build", "--lang", "en")  # Explicit command
+    storygen.run_command("build", "--variable", "lang=en")  # Explicit command
     assert list((storygen.project_dir / "_output").rglob("*.pdf"))
 
-    result = _clean(storygen.project_dir, "--lang", "en")
+    result = _clean(storygen.project_dir, "--variable", "lang=en")
     assert result.exit_code == 0, result.output
     assert not list((storygen.project_dir / "_output").rglob("*.pdf"))
     assert not list((storygen.project_dir / "_build").rglob("*.txt"))

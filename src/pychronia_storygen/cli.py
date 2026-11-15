@@ -19,7 +19,7 @@ from pychronia_storygen.document_formats import load_yaml_file, load_jinja_envir
     render_with_jinja_and_fact_tags, convert_rst_content_to_pdf, render_with_jinja, generate_rst_and_pdf_files, \
     render_with_jinja_and_convert_to_pdf, extract_text_from_odt_file, split_odt_file_into_separate_documents, \
     check_comment_sample, resolve_comment_sample, \
-    get_filename_language, expand_lang_placeholder, StorygenConfigError
+    get_filename_language, expand_path_placeholders, LANGUAGE_VARIABLE, StorygenConfigError
 from pychronia_storygen.data_files import load_data_files, run_variables_hook
 from pychronia_storygen.inventory import analyze_and_normalize_game_items
 from pychronia_storygen.story_tags import CURRENT_PLAYER_VARNAME, IS_CHEAT_SHEET_VARNAME, detect_game_item_errors, \
@@ -42,7 +42,8 @@ class StorygenSettings:
     jinja_env: object
     dynamic_variables: ChainMap
     dynamic_settings: ChainMap
-    language: str = None  # Language of the generated documents (eg. "fr"), if the project is translated
+    language: str = None  # Language of the generated documents (eg. "fr"), if the project is translated ("lang" variable)
+    path_variables: object = dataclasses.field(default_factory=dict)  # Root variables, usable in "{name}" placeholders of configuration paths
 
     def derive(self, new_config_level, default_variables=None, **extra_dynamic_variables):
         """
@@ -109,7 +110,7 @@ def _recursively_generate_group_sheets(data_tree: dict, group_breadcrumb: tuple,
 
             # Be tolerant if a single string was entered
             sheet_parts = (sheet_parts,) if isinstance(sheet_parts, str) else sheet_parts
-            sheet_parts = [expand_lang_placeholder(part, player_storygen_settings.language) for part in sheet_parts]
+            sheet_parts = [expand_path_placeholders(part, player_storygen_settings.path_variables) for part in sheet_parts]
 
             full_rst_content = ""
             for sheet_part in sheet_parts:
@@ -146,7 +147,7 @@ def _generate_inventory_files(inventory_name, inventory_config, storygen_setting
     storygen_settings = storygen_settings.derive(inventory_config, inventory_name=inventory_name)
 
     def _get_path(key):
-        return expand_lang_placeholder(inventory_config.get(key), storygen_settings.language)
+        return expand_path_placeholders(inventory_config.get(key), storygen_settings.path_variables)
 
     inventory_data_path = _get_path("inventory_data")
     if not inventory_data_path:
@@ -181,7 +182,7 @@ def _generate_inventory_files(inventory_name, inventory_config, storygen_setting
 def _generate_document_files(document_bundle_name, document_config, storygen_settings: StorygenSettings,
                              skip_document_splitting=False):
     logging.info("Processing generation of game document bundle '%s'" % document_bundle_name)
-    document_source = expand_lang_placeholder(document_config["document_source"], storygen_settings.language)
+    document_source = expand_path_placeholders(document_config["document_source"], storygen_settings.path_variables)
     document_text = extract_text_from_odt_file(document_source)
     # Else the story tags of gamemaster comments would be silently missed
     check_comment_sample(document_text, resolve_comment_sample(document_config.get("comment_sample"), storygen_settings.language),
@@ -216,7 +217,7 @@ def _generate_summary_files(summary_config, storygen_settings: StorygenSettings)
     storygen_settings = storygen_settings.derive(summary_config)
 
     def _get_path(key):
-        return expand_lang_placeholder(summary_config.get(key), storygen_settings.language)
+        return expand_path_placeholders(summary_config.get(key), storygen_settings.path_variables)
 
     # The coherence analysis is always done, even if the matching summary template is not configured
     jinja_env = storygen_settings.jinja_env
@@ -290,9 +291,41 @@ def cli():
     """Generate (default "build" command) or remove ("clean" command) the files of a storygen project."""
 
 
+VARIABLE_OPTION_HELP = ("Set a root variable, as NAME=VALUE (can be repeated). It overrides the 'variables' entry of "
+                        "the configuration, and can be used in jinja2 templates and in '{NAME}' placeholders of "
+                        "configuration paths. Values 'true'/'false' are booleans, integers are numbers, others "
+                        "are strings.")
+
+
+def parse_cli_variables(variable_pairs):
+    """
+    Turn the "NAME=VALUE" strings of --variable options into a dict of root variables.
+
+    Values "true"/"false" (whatever their case) become booleans, integer literals become integers,
+    and all others stay strings (eg. "fr", or "no" which YAML would turn into a boolean).
+    """
+    variables = {}
+    for pair in variable_pairs or ():
+        name, separator, value = pair.partition("=")
+        name = name.strip()
+        if not separator or not re.fullmatch(r"\w+", name):
+            raise click.BadParameter("Expected NAME=VALUE (eg. 'lang=fr'), not %r" % pair, param_hint="--variable")
+        if value.lower() in ("true", "false"):
+            value = (value.lower() == "true")
+        elif re.fullmatch(r"-?\d+", value):
+            value = int(value)
+        variables[name] = value
+    return variables
+
+
 def _check_language(language):
-    if language and not re.fullmatch(r"[a-z]{2}", language):
-        raise click.BadParameter("Language must be a 2-letter lowercase code, eg. 'fr'", param_hint="--lang")
+    """Validate the value of the "lang" root variable, and return it (None if no language is set)."""
+    if language is None or language == "":
+        return None
+    if not isinstance(language, str) or not re.fullmatch(r"[a-z]{2}", language):
+        raise click.BadParameter("Language must be a 2-letter lowercase code (eg. 'lang=fr'), not %r" % (language,),
+                                 param_hint="variable '%s'" % LANGUAGE_VARIABLE)
+    return language
 
 
 def _get_output_and_build_root_dirs(language, output_dir):
@@ -313,18 +346,19 @@ def _get_output_and_build_root_dirs(language, output_dir):
 @click.option('--verbose', '-v', is_flag=True, help="Print more output.")
 @click.option("-t", "--type", "selected_asset_types", type=click.Choice(['sheets', 'documents', 'inventories'], case_sensitive=False),
                             multiple=True, help="Select the types of assets to generate")
-@click.option("-l", "--lang", "language", default=None,
-              help="Language code (eg. 'fr') of a translated project: its 'configuration_<lang>.yaml' file is used "
-                   "if it exists (else 'configuration.yaml'), only the macros of language-neutral or '_<lang>' "
-                   "templates are loaded, and files are generated in '_build/<lang>/' and '_output/<lang>/'.")
+@click.option("-V", "--variable", "variable_pairs", multiple=True, metavar="NAME=VALUE",
+              help=VARIABLE_OPTION_HELP + " The 'lang' variable (eg. 'lang=fr') is the language of a translated "
+                   "project: its 'configuration_<lang>.yaml' file is used if it exists (else 'configuration.yaml'), "
+                   "only the macros of language-neutral or '_<lang>' templates are loaded, and files are generated "
+                   "in '_build/<lang>/' and '_output/<lang>/'.")
 @click.option("-o", "--output-dir", "output_dir", default=None, type=click.Path(file_okay=False),
               help="Directory where generated output files are written, used as-is instead of the default "
-                   "'<project_dir>/_output/' (or '<project_dir>/_output/<lang>/' when a language is given); "
+                   "'<project_dir>/_output/' (or '<project_dir>/_output/<lang>/' when a language is set); "
                    "intermediate build files then go into its '_build/' subfolder.")
 @click.option("--skip-document-splitting", "skip_document_splitting", is_flag=True,
               help="Parse ODT game documents for story tags, but don't split them into PDF files "
                    "(LibreOffice is then not needed).")
-def build(project_dir, verbose, selected_asset_types, language, output_dir, skip_document_splitting):
+def build(project_dir, verbose, selected_asset_types, variable_pairs, output_dir, skip_document_splitting):
     """Generate the files of the project folder PROJECT_DIR (default command)."""
     project_dir = os.path.abspath(project_dir).rstrip("\\/") + os.path.sep
     if output_dir:
@@ -338,10 +372,24 @@ def build(project_dir, verbose, selected_asset_types, language, output_dir, skip
 
     logging.basicConfig(level=(logging.DEBUG if verbose else logging.INFO))
 
+    cli_variables = parse_cli_variables(variable_pairs)
+    cli_language = _check_language(cli_variables.get(LANGUAGE_VARIABLE))
+
     logging.debug("Switching to current working directory: %s", project_dir)
     os.chdir(project_dir)
 
-    _check_language(language)
+    yaml_conf_file = "./configuration.yaml"   # FIXME
+    if cli_language and os.path.exists("./configuration_%s.yaml" % cli_language):
+        yaml_conf_file = "./configuration_%s.yaml" % cli_language
+    logging.info("Loading project configuration file '%s'", yaml_conf_file)
+
+    project_data_tree = load_yaml_file(yaml_conf_file) or {}
+
+    # Root variables of the configuration, overridden by those of the command line: besides being jinja2 variables,
+    # they are the only ones usable in the "{name}" placeholders of configuration paths (and in jinja2 settings)
+    path_variables = dict(project_data_tree.get("variables") or {})
+    path_variables.update(cli_variables)
+    language = _check_language(path_variables.get(LANGUAGE_VARIABLE))
 
     output_root_dir, build_root_dir = _get_output_and_build_root_dirs(language, output_dir)
     excluded_template_dirs = [Path("./_output"), Path("./_build")]  # They contain generated files, not templates
@@ -351,15 +399,8 @@ def build(project_dir, verbose, selected_asset_types, language, output_dir, skip
     os.makedirs(output_root_dir, exist_ok=True)
     os.makedirs(build_root_dir, exist_ok=True)
 
-    yaml_conf_file = "./configuration.yaml"   # FIXME
-    if language and os.path.exists("./configuration_%s.yaml" % language):
-        yaml_conf_file = "./configuration_%s.yaml" % language
-    logging.info("Loading project configuration file '%s'", yaml_conf_file)
-
-    project_data_tree = load_yaml_file(yaml_conf_file) or {}
-
     # Extra template directories are searched AFTER the project dir, and are also scanned for macros
-    template_dirs = [expand_lang_placeholder(template_dir, language)
+    template_dirs = [expand_path_placeholders(template_dir, path_variables)
                      for template_dir in (project_data_tree.get("template_dirs") or [])]
     for template_dir in template_dirs:
         if not os.path.isdir(template_dir):
@@ -368,10 +409,10 @@ def build(project_dir, verbose, selected_asset_types, language, output_dir, skip
     jinja_env = load_jinja_environment(["."] + template_dirs, use_macro_tags=True, language=language,
                                        excluded_dirs=excluded_template_dirs)
 
-    # Root variables: data files are below the "variables" of the configuration, which take precedence
-    root_variables = load_data_files(project_data_tree.get("data_files"), language=language)
-    root_variables.update(project_data_tree.get("variables") or {})
-    root_variables.update(project_dir=project_dir.replace("\\", "/"), language=language)
+    # Jinja2 variables: data files are below the root variables (configuration, then command line), which take precedence
+    root_variables = load_data_files(project_data_tree.get("data_files"), path_variables=path_variables)
+    root_variables.update(path_variables)
+    root_variables.update(project_dir=project_dir.replace("\\", "/"), language=language)  # "language" mirrors "lang"
 
     variables_hook = project_data_tree.get("variables_hook")
     if variables_hook:
@@ -386,6 +427,7 @@ def build(project_dir, verbose, selected_asset_types, language, output_dir, skip
         dynamic_variables=ChainMap(root_variables),
         dynamic_settings=ChainMap(project_data_tree.get("settings") or {}),
         language=language,
+        path_variables=MappingProxyType(path_variables),
     )
 
     if _is_asset_type_enabled("sheets"):
@@ -441,19 +483,20 @@ def _remove_empty_subfolders(root_dir: Path, dry_run):
 @cli.command()
 @click.argument('project_dir', type=click.Path(exists=True, file_okay=False))
 @click.option('--verbose', '-v', is_flag=True, help="Print more output.")
-@click.option("-l", "--lang", "language", default=None,
-              help="Only remove the files generated for this language (by default, those of all languages).")
+@click.option("-V", "--variable", "variable_pairs", multiple=True, metavar="NAME=VALUE",
+              help="Root variable given to the 'build' command; only 'lang' matters here (eg. 'lang=fr'), to only "
+                   "remove the files generated for this language (by default, those of all languages).")
 @click.option("-o", "--output-dir", "output_dir", default=None, type=click.Path(file_okay=False),
               help="Output directory which was given to the 'build' command, if any.")
 @click.option("--dry-run", "dry_run", is_flag=True, help="Only list the files which would be removed.")
-def clean(project_dir, verbose, language, output_dir, dry_run):
+def clean(project_dir, verbose, variable_pairs, output_dir, dry_run):
     """Remove the files generated from the project folder PROJECT_DIR.
 
     Only the PDF files of the output folder, and the intermediate RST (".txt") files of the build folder,
     are removed, along with the subfolders they leave empty; any other file is kept.
     """
     logging.basicConfig(level=(logging.DEBUG if verbose else logging.INFO))
-    _check_language(language)
+    language = _check_language(parse_cli_variables(variable_pairs).get(LANGUAGE_VARIABLE))
 
     project_dir = Path(project_dir).resolve()
     output_root_dir, build_root_dir = _get_output_and_build_root_dirs(

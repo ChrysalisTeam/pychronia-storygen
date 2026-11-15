@@ -5,7 +5,7 @@ import logging
 import os
 import sys
 
-from pychronia_storygen.document_formats import load_yaml_file, expand_lang_placeholder, StorygenConfigError
+from pychronia_storygen.document_formats import load_yaml_file, expand_path_placeholders, StorygenConfigError
 
 
 def deep_merge_localized_overlay(base, overlay, path=""):
@@ -34,14 +34,15 @@ def _find_first_existing_file(candidates):
     raise StorygenConfigError("None of the data files %s exists" % ", ".join(repr(c) for c in candidates))
 
 
-def load_data_files(data_files_config, language=None):
+def load_data_files(data_files_config, path_variables=None):
     """
     Load the "data_files" configuration entry (a list of mappings) and return the resulting dict of root variables.
 
     Each entry has a "file" (path, or list of candidate paths of which the first existing one is used),
     optionally an "overlay" (partial file, deep-merged over the data if it exists),
     and optionally a "variable" name under which the data is stored (else it must be a mapping, merged at the root).
-    Paths may contain the "{lang}" placeholder, and are relative to the current directory (the project dir).
+    Paths may contain "{name}" placeholders of root variables (eg. "{lang}", see path_variables), and are relative
+    to the current directory (the project dir).
     Entries are processed in order, the following ones overriding the previous ones.
     """
     variables = {}
@@ -51,12 +52,12 @@ def load_data_files(data_files_config, language=None):
 
         candidates = entry["file"]
         candidates = [candidates] if isinstance(candidates, str) else list(candidates)
-        candidates = [expand_lang_placeholder(candidate, language) for candidate in candidates]
+        candidates = [expand_path_placeholders(candidate, path_variables) for candidate in candidates]
         data_file = _find_first_existing_file(candidates)
         logging.info("Loading data file '%s'", data_file)
         data = load_yaml_file(data_file)
 
-        overlay_file = expand_lang_placeholder(entry.get("overlay"), language)
+        overlay_file = expand_path_placeholders(entry.get("overlay"), path_variables)
         if overlay_file:
             if os.path.exists(overlay_file):
                 logging.info("Merging data overlay '%s'", overlay_file)

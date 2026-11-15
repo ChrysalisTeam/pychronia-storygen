@@ -172,11 +172,11 @@ def test_clues_cli_checks_comment_sample(storygen):
     storygen.monkeypatch.setattr(cli_module, "extract_text_from_odt_file", lambda source: '{% xfact "a fact" %}text')
     storygen.monkeypatch.setattr(cli_module, "split_odt_file_into_separate_documents",
                                  lambda *args, **kwargs: calls.append(kwargs))
-    storygen.run("--lang", "fr")
+    storygen.run("--variable", "lang=fr")
     assert calls[0]["language"] == "fr"
-    result = storygen.run("--lang", "en", expect_ok=False)
+    result = storygen.run("--variable", "lang=en", expect_ok=False)
     assert "were not extracted" in str(result.exception)
-    storygen.run("--lang", "de")  # no sample for this language, no check
+    storygen.run("--variable", "lang=de")  # no sample for this language, no check
 
 
 SOFFICE_FODT = """<?xml version="1.0" encoding="UTF-8"?>

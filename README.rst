@@ -15,28 +15,34 @@ Then launch it with the "pychronia_storygen" command (or equivalently "python -m
 Generated RST files go into the "_build/" subfolder of the project, and PDF files into its "_output/" subfolder.
 LibreOffice must be installed to split ODT game documents into separate PDF files.
 
+The ``--variable NAME=VALUE`` option (or ``-V``, repeatable) sets a root variable of the project, overriding
+the "variables" entry of its configuration (see "Root variables" below)::
+
+    pychronia_storygen my_project --variable lang=en --variable decorations=false
+
 Translated projects name their files "<name>_<language>.<ext>" (eg. "intro_fr.rst" and "intro_en.rst"),
-and are built one language at a time::
+and are built one language at a time, selected by the "lang" variable::
 
-    pychronia_storygen my_project --lang en
+    pychronia_storygen my_project --variable lang=en
 
-With ``--lang``, the "configuration_<language>.yaml" file of the project is used if it exists (else "configuration.yaml"),
-jinja2 macros are only loaded from templates which are language-neutral or in this language,
-and files are generated in "_build/<language>/" and "_output/<language>/".
+With a "lang" variable, jinja2 macros are only loaded from templates which are language-neutral or in this language,
+and files are generated in "_build/<language>/" and "_output/<language>/". When it is given on the command line,
+the "configuration_<language>.yaml" file of the project is used if it exists (else "configuration.yaml").
 
 The ``--output-dir`` option forces the directory where output files are generated, used as-is
 instead of the default "_output/" (or "_output/<language>/") subfolder of the project;
 generated RST files then go into its "_build/" subfolder::
 
-    pychronia_storygen my_project --lang en --output-dir ../dist/my_project_en
+    pychronia_storygen my_project --variable lang=en --output-dir ../dist/my_project_en
 
 The command above is a shortcut for the default "build" command (``pychronia_storygen build my_project ...``).
 The "clean" command removes the generated files: the PDF files of the output folder, and the RST (".txt")
 files of the build folder, along with the subfolders they leave empty; any other file is kept.
-It accepts the same ``--lang`` (to only clean one language, else all languages are cleaned) and ``--output-dir``
-options as the build, and ``--dry-run`` lists the files without removing them::
+It accepts the same ``--variable lang=..`` (to only clean one language, else all languages are cleaned; other
+variables are ignored) and ``--output-dir`` options as the build, and ``--dry-run`` lists the files without
+removing them::
 
-    pychronia_storygen clean my_project --lang en --dry-run
+    pychronia_storygen clean my_project --variable lang=en --dry-run
 
 From a checkout without installing the package, "python main.py" works as well, provided the dependencies are installed.
 
@@ -48,13 +54,47 @@ All top-level sections of "configuration.yaml" are optional ("sheet_generation",
 and each of the three summary templates (facts, symbols, items, each with its destination).
 The coherence analysis runs at the end even if no summary template is configured.
 
-Paths with ``{lang}``
----------------------
+Root variables
+--------------
+
+::
+
+    "variables":
+      "lang": "fr"                  # default language, if any
+      "game_type": "standard"
+      "decorations": true
+
+The root variables are those of the top-level "variables" entry of the configuration, overridden (or completed)
+by the ``--variable NAME=VALUE`` options of the command line. Names are made of letters, digits and underscores.
+On the command line, the values "true" and "false" (whatever their case) are booleans, integers like "42" are
+numbers, and anything else is a string (eg. ``--variable lang=no``, ``--variable "title=My = title"``).
+
+Root variables are exposed in three places:
+
+- as jinja2 variables in all templates (``{{ game_type }}``, ``{% if decorations %}``), like the variables of
+  data files, hooks, groups and sheets;
+- as ``{name}`` placeholders in the paths of the configuration (see below);
+- as jinja2 variables in some string settings (see "RST to PDF settings").
+
+Variables coming from elsewhere (data files, Python hook, "variables" of groups and sheets) are only available
+in templates, NOT in path placeholders nor in settings.
+
+The "lang" variable is special: it must be a 2-letter lowercase code (eg. "fr"), and is the language of the
+generated documents (see above). Templates and hooks also receive it as "language" (``None`` if no language is set).
+
+Paths with ``{name}`` placeholders
+----------------------------------
 
 Every path-valued entry (sheet parts, "document_source", "inventory_*" and "game_*" templates/destinations/data,
-"template_dirs", "data_files", the "rst2pdf_conf_file" and "docutils_conf_file" settings) may contain the ``{lang}``
-placeholder, replaced by the ``--lang`` code, so that one configuration serves all languages.
-Using it without ``--lang`` is an error. In YAML, quote values with braces inside flow lists: ``["intro_{lang}.rst"]``.
+"template_dirs", "data_files", the "rst2pdf_conf_file" and "docutils_conf_file" settings) may contain ``{name}``
+placeholders, replaced by the value of the root variable of that name (a string, a number, or a boolean
+rendered as "true"/"false")::
+
+    "full_sheet": ["intro.{game_type}_{lang}.rst", "common_{lang}.rst"]
+
+So one configuration serves all languages and variants of a project. A placeholder without matching root
+variable is an error (eg. ``{lang}`` when no language is set).
+In YAML, quote values with braces inside flow lists: ``["intro_{lang}.rst"]``.
 
 Extra template directories
 --------------------------
@@ -93,7 +133,7 @@ Python hook
 The module is imported with the project folder and the "template_dirs" at the front of "sys.path".
 The function is called once, after data files are loaded and before any generation, as
 ``prepare_variables(variables, *, language, jinja_env)``, where "variables" is the dict of root variables
-(data files, then configuration "variables", "project_dir" and "language"). It may mutate it, or return a new dict.
+(data files, then configuration "variables", ``--variable`` options, "project_dir" and "language"). It may mutate it, or return a new dict.
 It can also register jinja2 filters on ``jinja_env``.
 
 current_player_id
@@ -106,14 +146,25 @@ an explicit ``null`` disables the registration of story tags for that sheet.
 RST to PDF settings
 -------------------
 
-In French (or without --lang), the space before "!", "?", ";" and before ":" (when followed by a space or a line break) becomes a non-breaking space in the final RST file; byte order marks (BOM) of the templates are removed.
+In French (or without "lang" variable), the space before "!", "?", ";" and before ":" (when followed by a space or a line break) becomes a non-breaking space in the final RST file; byte order marks (BOM) of the templates are removed.
 
 Hierarchical "settings" (project, group, sheet levels):
 
+- "rst2pdf_conf_file": rst2pdf configuration file (``--config`` option).
+- "rst2pdf_extra_args": extra command line arguments given to rst2pdf, eg. "--stylesheets=simple_large,dark".
 - "rst2pdf_smart_quotes": value of the rst2pdf ``--smart-quotes`` option (default 2); use 0 to let docutils handle quotes.
 - "docutils_conf_file": docutils configuration file, given to rst2pdf through the ``DOCUTILSCONFIG`` environment variable.
 - "unlink_unknown_rst_targets": if true, references like \`text\`_ to unknown targets are turned into plain text
   in the final RST file, before the PDF conversion.
+
+The string settings "rst2pdf_extra_args", "rst2pdf_conf_file" and "docutils_conf_file" may contain jinja2 markup,
+rendered with the root variables only (an undefined variable is an error). For example, to let
+``--variable decorations=false`` switch all documents to a printer-friendly style::
+
+    "variables":
+      "decorations": true
+    "settings":
+      "rst2pdf_extra_args": "--stylesheets={{ 'simple_large,dark_background' if decorations else 'simple_tight' }}"
 
 PDF files are always generated compressed (rst2pdf ``--compressed`` option, whatever the rst2pdf configuration file says).
 
@@ -136,7 +187,7 @@ LibreOffice, then splits it into one PDF per document, in a folder named after t
           - [recipes_of_potions, 2]                       # name, page count
           - [null, 1]                                     # null name: these pages are skipped
           - [useless_messages, 1, "Dear diary"]           # name, page count, text of the first page
-          - [oracle_vision, 3, {fr: "Vision", en: "Vision of"}]  # per-language text (see --lang)
+          - [oracle_vision, 3, {fr: "Vision", en: "Vision of"}]  # per-language text ("lang" variable)
           - [map, 1, null]                                # null text: the first page must have no text
 
 The ODT file is exported once (without its gamemaster comments), then each part is extracted with pypdf, keeping

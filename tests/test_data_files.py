@@ -33,7 +33,7 @@ def test_data_files_forms(storygen):
     storygen.write("dump_en.yaml", "chars:\n  bob:\n    name: Bob\n")
     storygen.write("sheet.rst", "{{ title }}|{{ shadowed }}|{{ root_only }}|{{ manual.chapter }}|{{ phone }}"
                                 "|{{ chars.bob.name }}|{{ chars.bob.age }}")
-    storygen.run("--lang", "en")
+    storygen.run("--variable", "lang=en")
     assert "from config|config|R|One|123|Bob|5" in storygen.build_text("alice_full_sheet.txt", lang="en")
 
 
