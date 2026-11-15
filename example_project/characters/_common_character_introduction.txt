@@ -1,5 +1,5 @@
 
-Sheet for character "{{ sheet_name }}"
+Sheet of {{ characters[sheet_name].full_name }}
 ###############################################
 
 
@@ -9,7 +9,10 @@ This is the common introduction for all characters.
 
 Intro message: {{ intro_message }}
 
-<{ faction_presentation faction_name=group_name }/>
+You are {{ characters[sheet_name].age }} years old. The story takes place in year {{ story_year }},
+{{ years_since_final_battle }} years after the final battle.
+
+<{ faction_presentation faction_name=characters[sheet_name].faction }/>
 
 
 Your sheet

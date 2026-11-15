@@ -1,0 +1,9 @@
+
+Histoire du monde de {{ world_name }}
+#######################################
+
+**Ce monde est très ancien et très magique : nous vous expliquons tout !**  {% xfact "World is old and magic" %}
+
+*En français, les espaces avant « ! », « ? », « ; » et « : » deviennent insécables dans les PDF.*
+
+{{ lipsum(html=False) }}

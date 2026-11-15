@@ -1,0 +1,7 @@
+
+
+This is the character sheet for the Enemy!
+
+You were defeated by the hero in year {% symbol "1256" for "final_battle_year" %}. {% xfact "Hero has defeated the enemy in the past" %}
+
+A wanted poster with your face is pinned in the goblin village.

@@ -1,0 +1,7 @@
+
+World History Summary for {{ world_name }}
+#############################################
+
+TLDR: this world is very old and very magic...
+
+*Hint for easy games: the final battle took place in year {% symbol "1256" for "final_battle_year" %}, on the old battlefield of the valley.*

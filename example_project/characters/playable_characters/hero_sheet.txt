@@ -1,0 +1,9 @@
+
+
+This is the character sheet for the Hero!
+
+You defeated the enemy in year {% symbol "1256" for "final_battle_year" %}. {% xfact "Hero has defeated the enemy in the past" as author %}
+
+To find the lair of the goblins, you will need the map of the valley. {% xitem "map of the valley" is needed %}
+
+<{ secret }>You are terribly afraid of goblins. {% xfact "Hero is afraid of goblins" as author %}</{ secret }>

@@ -1,0 +1,12 @@
+
+# Partial French translation of characters.yaml, deep-merged over it when building with "--variable lang=fr"
+# (every key must exist in characters.yaml)
+
+"hero":
+  "faction": "Chevaliers de l'Aube"
+
+"enemy":
+  "faction": "Légion des Ombres"
+
+"goblin":
+  "faction": "Tribus gobelines"

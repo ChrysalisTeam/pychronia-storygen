@@ -1,0 +1,8 @@
+
+Cheat sheet of {{ characters[sheet_name].full_name }}
+#####################################################
+
+Facts to remember (the "fact" tag outputs the name of the fact):
+
+- {% fact "Hero has defeated the enemy in the past" as author %}
+- {% fact "Hero is afraid of goblins" as author %}

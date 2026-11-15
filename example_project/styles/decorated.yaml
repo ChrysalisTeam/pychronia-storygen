@@ -1,0 +1,11 @@
+# rst2pdf stylesheet, enabled unless "--variable decorations=false" is given (see "settings" in configuration.yaml)
+
+styles:
+  title:
+    textColor: "#7a1f1f"
+  heading1:
+    textColor: "#7a1f1f"
+  heading2:
+    textColor: "#3b5f2a"
+  admonition:
+    backColor: "#f4e9c8"

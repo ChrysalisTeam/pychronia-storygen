@@ -3,3 +3,9 @@ Conclusion
 ==============
 
 This is the common conclusion for all characters.
+
+{% if is_villain %}
+**As a villain, you may lie to other players about anything.**
+{% else %}
+You must never lie to other players.
+{% endif %}

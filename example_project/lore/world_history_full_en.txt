@@ -1,0 +1,9 @@
+
+World History for {{ world_name }}
+####################################
+
+**This world is very old and very magic, below we explain it all!**  {% xfact "World is old and magic" %}
+
+{# This fact is not registered, since "current_player_id" is null for this sheet #}
+
+{{ lipsum(html=False) }}

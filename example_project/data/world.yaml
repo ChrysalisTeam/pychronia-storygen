@@ -1,0 +1,5 @@
+
+# Merged at the root of the template variables (see "data_files" in configuration.yaml)
+
+"story_year": 1276
+"final_battle_year": 1256    # the "final_battle_year" symbols of the templates must use the same value

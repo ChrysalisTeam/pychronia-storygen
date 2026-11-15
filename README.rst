@@ -128,6 +128,38 @@ With a "lang" variable:
 - templates also receive it as the "language" variable (``None`` if no language is set).
 
 
+Example project
+===============
+
+The "example_project/" folder is a small scenario (a hero, a villain and a goblin) showing most features; its
+"configuration.yaml" comments each of them. Try for example::
+
+    pychronia_storygen example_project                       # English, normal difficulty, decorated PDFs
+    pychronia_storygen example_project --list                # IDs of all items
+    pychronia_storygen example_project -V lang=fr -V difficulty=easy -V decorations=false
+    pychronia_storygen example_project --only "sheets/playable_characters/*" --skip "*/cheat" --no-pdf
+
+Where to look:
+
+- **Root variables and path placeholders**: "lang" picks ``lore/world_history_full_{lang}.txt`` (French
+  typography in "_fr"), "difficulty" picks ``lore/world_history_summary_{difficulty}.txt`` and enables a hint in
+  the goblin sheet, "decorations" toggles the "styles/decorated.yaml" stylesheet through a jinja2 setting.
+- **Shared sheet parts**: the "character_sheet" YAML anchor uses ``{group_name}`` and ``{sheet_name}``; the hero
+  merges it with ``<<`` and adds a cheat sheet; the enemy is in a nested "villains" group.
+- **Variables**: overridden at root, group and sheet levels ("intro_message", "is_villain");
+  "current_player_id" is null for the world history, which is lore and not a character.
+- **Data files and hook**: "data/world.yaml" (merged at the root), "data/characters.yaml" (under the "characters"
+  variable, with a French overlay, and an empty English one), and "storygen_hooks.py" (computes "years_since_final_battle", adds the "shout"
+  filter).
+- **Macros**: "macros.txt", used as ``<{ faction_presentation ... }/>`` and ``<{ secret }>...</{ secret }>``.
+- **Story tags**: ``fact`` (printed, in the hero cheat sheet) vs ``xfact`` (silent), symbols with case
+  variations, items needed by sheets and provided by the inventory or by the comments of game documents.
+- **Game documents**: "clues_for_game.odt" (text document) and "valley_documents.odp" (presentation, whose last
+  slide is skipped), with checks of their comments and of the first page of each part.
+- **Inventories and summaries**: "inventories/" (crates, important items, ``dangerous_render``) and "summaries/"
+  (the generated coherence reports).
+
+
 Project configuration
 =====================
 

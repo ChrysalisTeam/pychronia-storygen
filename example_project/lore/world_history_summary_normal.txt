@@ -1,0 +1,5 @@
+
+World History Summary for {{ world_name }}
+#############################################
+
+TLDR: this world is very old and very magic...

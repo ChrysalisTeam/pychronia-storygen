@@ -1,0 +1,17 @@
+
+# Stored under the "characters" template variable (see "data_files" in configuration.yaml)
+
+"hero":
+  "full_name": "Aldric the Brave"
+  "age": 42
+  "faction": "Knights of Dawn"
+
+"enemy":
+  "full_name": "Morgrath the Grim"
+  "age": 67
+  "faction": "Shadow Legion"
+
+"goblin":
+  "full_name": "Jolyfellow"
+  "age": 19
+  "faction": "Goblin tribes"

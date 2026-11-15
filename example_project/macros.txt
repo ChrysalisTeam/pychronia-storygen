@@ -7,6 +7,16 @@ Your faction is: {{ faction_name }}!
 {% endmacro %}
 
 
+{# Block macro, used as <{ secret }>Some text</{ secret }>: the text is available through caller() #}
+{% macro secret() %}
+
+.. admonition:: Secret
+
+   {{ caller() }}
+
+{% endmacro %}
+
+
 
 {% macro display_scenario_errors(has_serious_errors, error_messages) %}
 

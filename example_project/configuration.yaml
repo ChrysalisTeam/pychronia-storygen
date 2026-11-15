@@ -1,13 +1,99 @@
 
-summary_generation:
-  "game_facts_template": "summaries/game_facts_summary.txt"
-  "game_facts_destination": "summaries/game_facts_summary"
+# Example project of storygen: each entry is commented with the feature it demonstrates.
+# Build it with "pychronia_storygen example_project", see the "Example project" section of the README.
 
-  "game_symbols_template": "summaries/game_symbols_summary.txt"
-  "game_symbols_destination": "summaries/game_symbols_summary"
 
-  "game_items_template": "summaries/game_items_summary.txt"
-  "game_items_destination": "summaries/game_items_summary"
+# Root variables: available in all templates, and as {name} placeholders in the paths below.
+# Override them on the command line, eg. "--variable lang=fr --variable difficulty=easy".
+"variables":
+  "lang": "en"              # language of the documents (only the world history and faction names are translated)
+  "difficulty": "normal"    # or "easy": another cheat sheet for the world history, and hints in the goblin sheet
+  "decorations": true       # false: printer-friendly style for all PDFs (see "settings")
+
+
+# rst2pdf settings, which may also be set per group, sheet, inventory or summary
+"settings":
+  "rst2pdf_conf_file": "rst2pdf.conf"
+  # Jinja2 markup is allowed here, rendered with the root variables
+  "rst2pdf_extra_args": "{{ '--stylesheets=decorated' if decorations else '' }}"
+
+
+# YAML files loaded as template variables
+"data_files":
+  - "file": "data/world.yaml"                   # merged at the root of the variables
+  - "variable": "characters"                    # stored under the "characters" variable
+    "file": "data/characters.yaml"
+    "overlay": "data/characters_{lang}.yaml"    # partial translation, deep-merged if it exists (empty in English)
+
+
+# Python function computing extra variables and registering jinja2 filters (see storygen_hooks.py)
+"variables_hook": "storygen_hooks.prepare_variables"
+
+
+# Unknown top-level entries are ignored by storygen: this one holds a YAML anchor, reused by character sheets
+"sheet_templates":
+  "character_sheet": &character_sheet
+    "full_sheet":
+      - "characters/_common_character_introduction.txt"
+      - "characters/{group_name}/{sheet_name}_sheet.txt"    # names of the innermost group and of the sheet
+      - "characters/_common_character_conclusion.txt"
+
+
+"sheet_generation":
+
+  # Default variables of all sheets, overridden by those of groups and sheets
+  "variables":
+    "intro_message": "This is a default introduction message for all sheets!"
+    "is_villain": false
+
+  "sheets":
+    "world_history":
+      "variables":
+        "world_name": "Pangea"
+        "current_player_id": null    # lore, not a character: its story tags are attributed to nobody
+      "full_sheet": "lore/world_history_full_{lang}.txt"               # one template per language
+      "cheat_sheet": "lore/world_history_summary_{difficulty}.txt"     # one template per difficulty
+
+  "groups":
+
+    "playable_characters":
+      "variables":
+        "intro_message": "This is an introduction message visible to all PLAYABLE character sheets!"
+      "sheets":
+        "hero":
+          <<: *character_sheet       # the parts of the anchor, completed with a cheat sheet
+          "cheat_sheet": "characters/playable_characters/hero_cheat_sheet.txt"
+      "groups":
+        "villains":                  # nested group: its sheets have IDs like "sheets/playable_characters/villains/enemy/full"
+          "variables":
+            "is_villain": true
+          "sheets":
+            "enemy": *character_sheet
+
+    "non_playable_characters":
+      "variables":
+        "intro_message": "This is an introduction message visible to all NON-PLAYABLE character sheets!"
+      "sheets":
+        "goblin": *character_sheet
+
+
+"document_generation":
+
+  "game_paper_clues":
+    "document_source": "documents/clues_for_game.odt"     # text document, with story tags in its gamemaster comments
+    "comment_sample": "{% fact"                           # fails if the comments were not extracted
+    "document_splitting":
+      - ["recipes_of_potions", 2, "Elixir Flexifiant"]    # name, page count, text of the first page
+      - ["useless_secret_messages", 1, null]              # null text: this page must have no text (only drawings)
+
+  "valley_documents":
+    "document_source": "documents/valley_documents.odp"   # presentation: one page per slide
+    "comment_sample": "{% xitem"
+    "document_splitting":
+      - ["valley_map", 1, "Map of the Goblin Valley"]
+      - ["wanted_poster", 1, "WANTED"]
+      - [null, 1]                                         # null name: gamemaster memo, not printed
+
 
 "inventory_generation":
   "main_inventory":
@@ -19,49 +105,13 @@ summary_generation:
     "inventory_per_crate_template": "inventories/game_inventory_per_crate.txt"
     "inventory_per_crate_destination": "inventories/main_inventory_per_crate"
 
-"document_generation":
-  "game_paper_clues":
-    "document_source": "documents/clues_for_game.odt"
-    "document_splitting":
-      - ["recipes_of_potions", 2]
-      - ["useless_secret_messages", 1]
 
-"sheet_generation":
+"summary_generation":
+  "game_facts_template": "summaries/game_facts_summary.txt"
+  "game_facts_destination": "summaries/game_facts_summary"
 
-  "variables":
-    "intro_message": "This is a default introduction message for all sheets !"
-    "game_story_date": "March 13th, 1905"
+  "game_symbols_template": "summaries/game_symbols_summary.txt"
+  "game_symbols_destination": "summaries/game_symbols_summary"
 
-  "sheets":
-    "world_history":
-      "variables":
-        "world_name": "Pangea"
-      "full_sheet": "lore/world_history_full.txt"
-      "cheat_sheet": "lore/world_history_summary.txt"
-
-  "groups":
-
-    "playable_characters":
-      "variables":
-        "intro_message": "This is an introduction message visible to all PLAYABLE character sheets !"
-      "sheets":
-        "hero":
-          "full_sheet":
-            - "characters/_common_character_introduction.txt"
-            - "characters/hero_sheet.txt"
-            - "characters/_common_character_conclusion.txt"
-        "enemy":
-          "full_sheet":
-            - "characters/_common_character_introduction.txt"
-            - "characters/enemy_sheet.txt"
-            - "characters/_common_character_conclusion.txt"
-
-    "non_playable_characters":
-      "variables":
-        "intro_message": "This is an introduction message visible to all NON-PLAYABLE character sheets !"
-      "sheets":
-        "goblin":
-          "full_sheet":
-            - "characters/_common_character_introduction.txt"
-            - "characters/goblin_sheet.txt"
-            - "characters/_common_character_conclusion.txt"
+  "game_items_template": "summaries/game_items_summary.txt"
+  "game_items_destination": "summaries/game_items_summary"
