@@ -219,9 +219,18 @@ Data files
       - file: [local.yaml, local.yaml.example]   # list of candidates: the first existing one is used, else error
       - file: dump.yaml
         overlay: dump_{lang}.yaml                # optional partial translation, deep-merged if the file exists
+      - file: characters_{lang}.yaml
+        merge: deep                              # merged recursively into the variables loaded so far
+      - file: character_overrides_{lang}.yaml
+        merge: deep
 
 Entries are loaded in order (later ones override earlier ones), and have a lower priority than the root variables.
 Every key of an overlay must exist in the base data.
+
+By default ("merge: root"), the root keys of a file replace the variables of the same names. With "merge: deep",
+nested mappings are merged key by key instead, while other values (lists included) are replaced: this combines
+several files that fill the same mappings, eg. fixtures split by topic plus a file of overrides. New keys are allowed
+at every level, and "merge" can't be combined with "variable". A UTF-8 BOM at the start of YAML files is ignored.
 
 Python hook
 -----------

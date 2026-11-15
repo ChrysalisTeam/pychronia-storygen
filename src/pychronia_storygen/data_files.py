@@ -27,6 +27,23 @@ def deep_merge_localized_overlay(base, overlay, path=""):
     return base
 
 
+def deep_merge(base, data):
+    """
+    Merge the tree "data" into the tree "base", in place, and return base.
+
+    Mappings are merged key by key (new keys are allowed), all other values (lists included) replace the base ones.
+    """
+    for key, value in data.items():
+        if isinstance(value, dict) and isinstance(base.get(key), dict):
+            deep_merge(base[key], value)
+        else:
+            base[key] = value
+    return base
+
+
+DATA_FILE_MERGE_MODES = ("root", "deep")
+
+
 def _find_first_existing_file(candidates):
     for candidate in candidates:
         if os.path.exists(candidate):
@@ -41,6 +58,8 @@ def load_data_files(data_files_config, path_variables=None):
     Each entry has a "file" (path, or list of candidate paths of which the first existing one is used),
     optionally an "overlay" (partial file, deep-merged over the data if it exists),
     and optionally a "variable" name under which the data is stored (else it must be a mapping, merged at the root).
+    The "merge" key tells how a mapping is merged at the root: "root" (default) replaces the root variables of the
+    same names, "deep" merges nested mappings recursively (see deep_merge()), to combine several partial files.
     Paths may contain "{name}" placeholders of root variables (eg. "{lang}", see path_variables), and are relative
     to the current directory (the project dir).
     Entries are processed in order, the following ones overriding the previous ones.
@@ -49,6 +68,13 @@ def load_data_files(data_files_config, path_variables=None):
     for idx, entry in enumerate(data_files_config or []):
         if not isinstance(entry, dict) or not entry.get("file"):
             raise StorygenConfigError("Entry %d of 'data_files' must be a mapping with a 'file' key" % idx)
+
+        merge_mode = entry.get("merge", "root")
+        if merge_mode not in DATA_FILE_MERGE_MODES:
+            raise StorygenConfigError("Entry %d of 'data_files' has an unknown 'merge' mode %r (must be one of %s)"
+                                      % (idx, merge_mode, ", ".join(DATA_FILE_MERGE_MODES)))
+        if merge_mode != "root" and entry.get("variable"):
+            raise StorygenConfigError("Entry %d of 'data_files' can't have both a 'variable' and a 'merge' mode" % idx)
 
         candidates = entry["file"]
         candidates = [candidates] if isinstance(candidates, str) else list(candidates)
@@ -75,7 +101,10 @@ def load_data_files(data_files_config, path_variables=None):
                 data = {}
             if not isinstance(data, dict):
                 raise StorygenConfigError("Data file '%s' must contain a mapping, since no 'variable' name is given" % data_file)
-            variables.update(data)
+            if merge_mode == "deep":
+                deep_merge(variables, data)
+            else:
+                variables.update(data)
     return variables
 
 

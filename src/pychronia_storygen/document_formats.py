@@ -104,7 +104,7 @@ _StorygenYamlLoader.add_constructor("tag:yaml.org,2002:python/tuple",
 
 
 def load_yaml_file(yaml_file):
-    with open(yaml_file, "r", encoding="utf8") as f:
+    with open(yaml_file, "r", encoding="utf-8-sig") as f:  # Some editors add a BOM to UTF-8 files
         data = yaml.load(f, Loader=_StorygenYamlLoader)
         return data
 
