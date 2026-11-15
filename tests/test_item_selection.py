@@ -166,3 +166,12 @@ def test_no_pdf_combines_with_item_selection(storygen):
     assert storygen.pdf_calls == []
     assert storygen.build_file("players/bob_full_sheet.txt").exists()
     assert not storygen.build_file("players/alice_full_sheet.txt").exists()
+
+
+def test_unselected_inventories_still_feed_the_coherence_analysis(storygen):
+    _project(storygen)
+    storygen.write("bob.rst", '{% xfact "bob fact" %}{% xitem "potion" is needed %}Bob')
+    storygen.write("per_section.rst", """{{ '{% xitem "potion" is provided %}'|dangerous_render }}""")
+    storygen.run("--only", "*bob*")  # the potion of the unselected inventory is still registered
+    assert _generated_pdfs(storygen) == ["players/bob_full_sheet.pdf"]
+    assert not storygen.build_file("inventory_per_section.txt").exists()

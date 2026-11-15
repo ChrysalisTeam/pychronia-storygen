@@ -40,7 +40,7 @@ class ItemSelection:
     Selection of the items (sheets, document bundles, inventory sheets, summaries) whose files are generated,
     by glob patterns (see fnmatch, "*" also matches "/") on their IDs, like "sheets/players/alice/cheat".
 
-    Unselected sheets and documents are still rendered/parsed, so that the coherence analysis sees all story tags.
+    Unselected sheets, documents and inventories are still rendered/parsed, so that the coherence analysis sees all story tags.
     In listing mode, nothing is rendered nor generated, items IDs are just collected.
     """
     only_patterns: tuple = ()  # If not empty, only the items matching one of them are selected
@@ -206,34 +206,32 @@ def _generate_inventory_files(inventory_name, inventory_config, storygen_setting
     inventory_per_crate_template_name = _get_path("inventory_per_crate_template")
     inventory_per_crate_destination = _get_path("inventory_per_crate_destination")
 
-    # Inventory sheets don't register story tags, so unselected ones are not even rendered
     selection = storygen_settings.selection
-    is_per_section_selected = bool(inventory_per_section_template_name and inventory_per_section_destination
-                                   and selection.is_selected("inventories/%s/per_section" % inventory_name))
-    is_per_crate_selected = bool(inventory_per_crate_template_name and inventory_per_crate_destination
-                                 and selection.is_selected("inventories/%s/per_crate" % inventory_name))
-    if not (is_per_section_selected or is_per_crate_selected):
+    inventory_sheets = [  # (kind, template, destination, name of the items variable)
+        ("per_section", inventory_per_section_template_name, inventory_per_section_destination, "items_per_section"),
+        ("per_crate", inventory_per_crate_template_name, inventory_per_crate_destination, "items_per_crate"),
+    ]
+    inventory_sheets = [(kind, template_name, destination, items_varname,
+                         selection.is_selected("inventories/%s/%s" % (inventory_name, kind)))
+                        for (kind, template_name, destination, items_varname) in inventory_sheets
+                        if template_name and destination]
+    if selection.listing or not inventory_sheets:
         return
 
     inventory_data = load_yaml_file(Path(inventory_data_path))
     game_items_per_section, game_items_per_crate = analyze_and_normalize_game_items(
         inventory_data, important_marker="IMPORTANT")
+    items_variables = dict(items_per_section=game_items_per_section, items_per_crate=game_items_per_crate)
 
-    if is_per_section_selected:
-        logging.info("Processing per-section sheet for game inventory '%s'" % inventory_name)
-        jinja_context = dict(items_per_section=game_items_per_section, **storygen_settings.dynamic_variables)
-        render_with_jinja_and_convert_to_pdf(inventory_per_section_template_name,
-                                             relative_path=Path(inventory_per_section_destination),
-                                             jinja_context=jinja_context,
-                                             storygen_settings=storygen_settings)
-
-    if is_per_crate_selected:
-        logging.info("Processing per-crate sheet for game inventory '%s'" % inventory_name)
-        jinja_context = dict(items_per_crate=game_items_per_crate, **storygen_settings.dynamic_variables)
-        render_with_jinja_and_convert_to_pdf(inventory_per_crate_template_name,
-                                             relative_path=Path(inventory_per_crate_destination),
-                                             jinja_context=jinja_context,
-                                             storygen_settings=storygen_settings)
+    for kind, template_name, destination, items_varname, is_selected in inventory_sheets:
+        logging.info("Processing %s sheet for game inventory '%s'" % (kind.replace("_", "-"), inventory_name))
+        jinja_context = {items_varname: items_variables[items_varname], **storygen_settings.dynamic_variables}
+        # Rendered anyway, since story tags of inventory data are registered via the "dangerous_render" filter
+        rst_content = render_with_jinja(filename=template_name, jinja_env=storygen_settings.jinja_env,
+                                        jinja_context=jinja_context)
+        if is_selected:
+            generate_rst_and_pdf_files(rst_content=rst_content, relative_path=Path(destination),
+                                       storygen_settings=storygen_settings)
 
 def _generate_document_files(document_bundle_name, document_config, storygen_settings: StorygenSettings,
                              skip_document_splitting=False):
@@ -414,8 +412,8 @@ def _get_output_and_build_root_dirs(language, output_dir):
                    "(LibreOffice is then not needed).")
 @click.option("--only", "only_patterns", multiple=True, metavar="PATTERN",
               help="Only generate the files of the items whose ID matches this glob pattern (can be repeated), "
-                   "eg. 'sheets/players/*', '*alice*' or '*/cheat'; see --list for the IDs. Unselected sheets and "
-                   "documents are still rendered and parsed, so the coherence analysis stays complete.")
+                   "eg. 'sheets/players/*', '*alice*' or '*/cheat'; see --list for the IDs. Unselected items "
+                   "are still rendered (except summaries), so the coherence analysis stays complete.")
 @click.option("--skip", "skip_patterns", multiple=True, metavar="PATTERN",
               help="Don't generate the files of the items whose ID matches this glob pattern (can be repeated), "
                    "even if they match an --only pattern.")
