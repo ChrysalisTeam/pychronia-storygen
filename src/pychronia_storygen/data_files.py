@@ -56,7 +56,7 @@ def load_data_files(data_files_config, path_variables=None):
     Load the "data_files" configuration entry (a list of mappings) and return the resulting dict of root variables.
 
     Each entry has a "file" (path, or list of candidate paths of which the first existing one is used),
-    optionally an "overlay" (partial file, deep-merged over the data if it exists),
+    optionally an "overlay" (partial file, which must exist but may be empty, deep-merged over the data),
     and optionally a "variable" name under which the data is stored (else it must be a mapping, merged at the root).
     The "merge" key tells how a mapping is merged at the root: "root" (default) replaces the root variables of the
     same names, "deep" merges nested mappings recursively (see deep_merge()), to combine several partial files.
@@ -85,13 +85,17 @@ def load_data_files(data_files_config, path_variables=None):
 
         overlay_file = expand_path_placeholders(entry.get("overlay"), path_variables)
         if overlay_file:
-            if os.path.exists(overlay_file):
-                logging.info("Merging data overlay '%s'", overlay_file)
-                overlay = load_yaml_file(overlay_file)
-                if overlay:
-                    deep_merge_localized_overlay(data, overlay)
-            else:
-                logging.warning("No data overlay '%s' found, using base data only", overlay_file)
+            # Required even for the language of the base data (as an empty file), so that a wrong path or
+            # a forgotten translation doesn't silently produce untranslated documents
+            if not os.path.exists(overlay_file):
+                raise StorygenConfigError("Data overlay '%s' does not exist (use an empty file if there is "
+                                          "nothing to translate)" % overlay_file)
+            logging.info("Merging data overlay '%s'", overlay_file)
+            overlay = load_yaml_file(overlay_file)
+            if overlay:
+                if not isinstance(overlay, dict):
+                    raise StorygenConfigError("Data overlay '%s' must contain a mapping" % overlay_file)
+                deep_merge_localized_overlay(data, overlay)
 
         variable_name = entry.get("variable")
         if variable_name:

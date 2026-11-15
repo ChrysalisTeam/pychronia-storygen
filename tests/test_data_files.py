@@ -37,15 +37,35 @@ def test_data_files_forms(storygen):
     assert "from config|config|R|One|123|Bob|5" in storygen.build_text("alice_full_sheet.txt", lang="en")
 
 
-def test_missing_overlay_is_tolerated_and_missing_file_is_not(storygen):
+def test_missing_files_are_errors(storygen):
     storygen.write("configuration.yaml", _config("          - {file: dump.yaml, overlay: nothing.yaml}\n"))
     storygen.write("dump.yaml", "x: 1\n")
     storygen.write("sheet.rst", "{{ x }}")
-    storygen.run()
+    result = storygen.run(expect_ok=False)
+    assert result.exit_code != 0 and "nothing.yaml" in result.output  # else a wrong path would go unnoticed
 
     storygen.write("configuration.yaml", _config("          - file: [a.yaml, b.yaml]\n"))
     result = storygen.run(expect_ok=False)
     assert result.exit_code != 0 and "a.yaml" in result.output
+
+
+@pytest.mark.parametrize("overlay_content", ["", "{}\n"])
+def test_empty_overlay_is_accepted(storygen, overlay_content):
+    storygen.write("configuration.yaml", _config("          - {file: dump.yaml, overlay: dump_overlay.yaml}\n"))
+    storygen.write("dump.yaml", "x: 1\n")
+    storygen.write("dump_overlay.yaml", overlay_content)  # eg. for the language of the base data
+    storygen.write("sheet.rst", "{{ x }}")
+    storygen.run()
+    assert "1" in storygen.build_text("alice_full_sheet.txt")
+
+
+def test_non_mapping_overlay_is_an_error(storygen):
+    storygen.write("configuration.yaml", _config("          - {file: dump.yaml, overlay: dump_overlay.yaml}\n"))
+    storygen.write("dump.yaml", "x: 1\n")
+    storygen.write("dump_overlay.yaml", "- 1\n")
+    storygen.write("sheet.rst", "{{ x }}")
+    result = storygen.run(expect_ok=False)
+    assert result.exit_code != 0 and "dump_overlay.yaml" in result.output
 
 
 def test_non_mapping_without_variable_is_an_error(storygen):

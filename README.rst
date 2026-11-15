@@ -218,14 +218,15 @@ Data files
         file: manual_{lang}.yaml
       - file: [local.yaml, local.yaml.example]   # list of candidates: the first existing one is used, else error
       - file: dump.yaml
-        overlay: dump_{lang}.yaml                # optional partial translation, deep-merged if the file exists
+        overlay: dump_{lang}.yaml                # optional partial translation, deep-merged over the data
       - file: characters_{lang}.yaml
         merge: deep                              # merged recursively into the variables loaded so far
       - file: character_overrides_{lang}.yaml
         merge: deep
 
 Entries are loaded in order (later ones override earlier ones), and have a lower priority than the root variables.
-Every key of an overlay must exist in the base data.
+Every key of an overlay must exist in the base data. An overlay file must exist, so that a wrong path or a forgotten
+translation is detected: for the language in which the base data is written, use an empty file (or ``{}``).
 
 By default ("merge: root"), the root keys of a file replace the variables of the same names. With "merge: deep",
 nested mappings are merged key by key instead, while other values (lists included) are replaced: this combines
