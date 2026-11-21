@@ -29,6 +29,8 @@ def test_current_player_id_defaults_and_overrides(storygen):
     assert "group_default" in text("npcs/inherits_full_sheet.txt")
     assert "sheet_choice" in text("npcs/overrides_full_sheet.txt")
     assert "None" in text("npcs/nobody_full_sheet.txt")
+    # Without player id, facts are not registered, but the "fact" tag still outputs its name
+    assert "the fact" in text("npcs/nobody_full_sheet.txt")
 
 
 def test_facts_registered_per_effective_player_id(storygen):

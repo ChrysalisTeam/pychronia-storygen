@@ -182,14 +182,14 @@ class StoryChecksExtension(Extension):
         #    import traceback
         #    traceback.print_stack()
 
-        if player_id is None:
-            logging.debug("Aborting registration of fact '%s' because player-id is set to None", fact_name)
-            return ""  # we abort registration of fact
-
         as_what = as_what or "viewer"  # default status
 
         if as_what not in AUTHORIZED_FACT_RECIPIENTS:
             raise RuntimeError("Abnormal fact status: %r for %r (authorized: %s)" % (as_what, fact_name, AUTHORIZED_FACT_RECIPIENTS))
+
+        if player_id is None:
+            logging.debug("Aborting registration of fact '%s' because player-id is set to None", fact_name)
+            return "" if no_output else fact_name  # no registration, but the "fact" tag still outputs its name
 
         marker = MARKER_FORMAT % dict(fact_name=fact_name, as_what=as_what,
                                       player_id=player_id, is_cheat_sheet=int(is_cheat_sheet),
