@@ -215,32 +215,36 @@ class OpenDocumentTextFile :
             name = style.getAttribute("style:name")
 
             prop = ListProperties()
-            if style.childNodes :
-                if ( style.childNodes[0].tagName
-                     == "text:list-level-style-number" ) :
+            levels = [node for node in style.childNodes
+                      if node.nodeType == xml.dom.Node.ELEMENT_NODE]  # skip whitespace of indented XML
+            if levels :
+                if levels[0].tagName == "text:list-level-style-number" :
                     prop.setOrdered(True)
 
             self.listStyles[name] = prop
         
 
-    def load(self, filepath) :
-        """ Loads an ODT file. """
-        
-        zip = zipfile.ZipFile(filepath)
+    def processDocumentStyles (self, document) :
+        """ Extracts the fonts, styles and list styles of a parsed XML document. """
+        for fontDecl in document.getElementsByTagName("office:font-face-decls") :
+            self.processFontDeclarations(fontDecl)
+        self.processStyles(document.getElementsByTagName("style:style"))
+        self.processListStyles(document.getElementsByTagName(
+            "text:list-style"))
 
-        styles_doc = xml.dom.minidom.parseString(zip.read("styles.xml"))
-        self.processFontDeclarations(styles_doc.getElementsByTagName(
-            "office:font-face-decls")[0])
-        self.processStyles(styles_doc.getElementsByTagName("style:style"))
-        self.processListStyles(styles_doc.getElementsByTagName(
-            "text:list-style"))
-        
-        self.content = xml.dom.minidom.parseString(zip.read("content.xml"))
-        self.processFontDeclarations(self.content.getElementsByTagName(
-            "office:font-face-decls")[0])
-        self.processStyles(self.content.getElementsByTagName("style:style"))
-        self.processListStyles(self.content.getElementsByTagName(
-            "text:list-style"))
+    def load(self, filepath) :
+        """ Loads an OpenDocument file: a ZIP package (ODT, ODP, ODG), or a flat XML file (FODT, FODP, FODG),
+            which holds styles and content in a single document. """
+
+        if zipfile.is_zipfile(filepath) :
+            with zipfile.ZipFile(filepath) as zip :
+                styles_doc = xml.dom.minidom.parseString(zip.read("styles.xml"))
+                self.content = xml.dom.minidom.parseString(zip.read("content.xml"))
+            self.processDocumentStyles(styles_doc)
+        else :
+            self.content = xml.dom.minidom.parse(str(filepath))
+
+        self.processDocumentStyles(self.content)
 
     def compressCodeBlocks(self, text) :
         """ Removes extra blank lines from code blocks. """
@@ -312,8 +316,8 @@ class OpenDocumentTextFile :
 
 
         paragraphs = [el for el in text.childNodes
-                      if el.tagName in ["text:p", "text:h",
-                                        "text:list"]]
+                      if getattr(el, "tagName", None) in ["text:p", "text:h",
+                                                          "text:list"]]  # skips whitespace of flat XML files
 
         for paragraph in paragraphs :
             if paragraph.tagName == "text:list" :

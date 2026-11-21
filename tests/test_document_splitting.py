@@ -199,6 +199,14 @@ SOFFICE_FODT = """<?xml version="1.0" encoding="UTF-8"?>
 """
 
 
+def test_extract_text_from_flat_xml_file(tmp_path):
+    source = tmp_path / "doc.fodt"
+    source.write_text(SOFFICE_FODT, encoding="utf8")
+    text = document_formats.extract_text_from_odt_file(source)
+    for expected in ("Page one text", "SECRET gamemaster comment", "Page two text", "Page three text"):
+        assert expected in text
+
+
 def test_split_with_real_libreoffice(tmp_path):
     try:
         document_formats._find_soffice()
