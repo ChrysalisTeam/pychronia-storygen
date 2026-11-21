@@ -31,6 +31,9 @@ IGNORED_TAGS = []  # or ["office:annotation"]
 
 FOOTNOTE_STYLES = ["Footnote"]
 
+# Top-level elements of a text document whose nested paragraphs must be rendered too
+CONTAINER_TAGS = ["table:table", "text:section"]
+
 
 class TextProps :
     """ Holds properties for a text style. """
@@ -272,19 +275,29 @@ class OpenDocumentTextFile :
 
         
             
-        i = 0
-        for item in listElement.childNodes :
-            i += 1
+        items = [node for node in listElement.childNodes
+                 if getattr(node, "tagName", None) in ("text:list-item", "text:list-header")]
+
+        for i, item in enumerate(items, start=1) :
             if props.ordered :
                 number = str(i)
-                number = number + "." + " "*(2-len(number))
-                buffer += number + self.paragraphToString(item.childNodes[0],
-                                                        indent=3)
+                prefix = number + "." + " "*(2-len(number))
             else :
-                buffer += "* " + self.paragraphToString(item.childNodes[0],
-                                                        indent=2)
+                prefix = "* "
+            indent = len(prefix)
+
+            # All the paragraphs and sub-lists of the item, not only its first paragraph
+            parts = []
+            for child in item.childNodes :
+                tag = getattr(child, "tagName", None)
+                if tag == "text:list" :
+                    parts.append(self.listToString(child).rstrip().replace("\n", "\n" + " "*indent))
+                elif tag in ("text:p", "text:h") :
+                    parts.append(self.paragraphToString(child, indent=indent))
+
+            buffer += prefix + ("\n\n" + " "*indent).join(parts)
             buffer += "\n\n"
-            
+
         return buffer
 
     def drawingToString (self, body) :
@@ -315,15 +328,17 @@ class OpenDocumentTextFile :
         buffer = u""
 
 
-        paragraphs = [el for el in text.childNodes
-                      if getattr(el, "tagName", None) in ["text:p", "text:h",
-                                                          "text:list"]]  # skips whitespace of flat XML files
-
-        for paragraph in paragraphs :
-            if paragraph.tagName == "text:list" :
-                text = self.listToString(paragraph)
+        for element in text.childNodes :
+            tag = getattr(element, "tagName", None)  # None for whitespace of flat XML files
+            if tag == "text:list" :
+                text = self.listToString(element)
+            elif tag in ("text:p", "text:h") :
+                text = self.paragraphToString(element)
+            elif tag in CONTAINER_TAGS or (tag or "").startswith("draw:") :
+                # tables, sections and page-anchored frames: render all their paragraphs, in document order
+                text = self.drawingToString(element).rstrip()
             else :
-                text = self.paragraphToString(paragraph)
+                continue  # declarations, tracked changes (deleted texts), tables of contents...
             if text :
                 buffer += text + "\n\n"
 

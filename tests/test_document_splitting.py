@@ -207,6 +207,42 @@ def test_extract_text_from_flat_xml_file(tmp_path):
         assert expected in text
 
 
+NESTED_PARAGRAPHS_FODT = """<?xml version="1.0" encoding="UTF-8"?>
+<office:document xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+  xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
+  office:version="1.2" office:mimetype="application/vnd.oasis.opendocument.text">
+ <office:body><office:text>
+  <text:p>Top {% xitem "a" is needed %}</text:p>
+  <table:table table:name="T1"><table:table-row><table:table-cell>
+   <text:p>Cell {% xitem "b" is needed %}</text:p>
+  </table:table-cell></table:table-row></table:table>
+  <text:section text:name="S1"><text:p>Section {% xitem "c" is needed %}</text:p></text:section>
+  <text:list>
+   <text:list-item><text:p>First</text:p><text:p>Second {% xitem "d" is needed %}</text:p>
+    <text:list><text:list-item><text:p>Nested {% xitem "e" is needed %}</text:p></text:list-item></text:list>
+   </text:list-item>
+   <text:list-item><text:p>Other item</text:p></text:list-item>
+  </text:list>
+  <text:tracked-changes><text:changed-region text:id="ct1"><text:deletion>
+   <text:p>Deleted {% xitem "z" is needed %}</text:p>
+  </text:deletion></text:changed-region></text:tracked-changes>
+ </office:text></office:body>
+</office:document>
+"""
+
+
+def test_extract_text_of_tables_sections_and_list_items(tmp_path):
+    source = tmp_path / "doc.fodt"
+    source.write_text(NESTED_PARAGRAPHS_FODT, encoding="utf8")
+    text = document_formats.extract_text_from_odt_file(source)
+    for name in "abcde":
+        assert '{%% xitem "%s" is needed %%}' % name in text
+    assert "First" in text and "Other item" in text
+    assert "Deleted" not in text  # texts deleted with change tracking are ignored
+
+
 def test_split_with_real_libreoffice(tmp_path):
     try:
         document_formats._find_soffice()
